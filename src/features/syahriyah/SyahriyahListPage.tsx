@@ -12,6 +12,7 @@ import {
   Undo2,
   ChevronDown,
   Printer,
+  Gift,
 } from 'lucide-react';
 import { SyahriyahBulan, SyahriyahTransaksiRecord } from '../../types/syahriyah';
 import { Santri } from '../../types/santri';
@@ -22,6 +23,7 @@ import { showToast } from '../../components/ui/Toast';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { SyahriyahPaymentModal } from './SyahriyahPaymentModal';
 import { StrukPembayaranCard, StrukData, StrukItem } from '../../components/ui/StrukPembayaranCard';
+import { KeringananModal } from './KeringananModal';
 import { authStore, AuthUser } from '../../store/authStore';
 
 const BULAN_NAMES = [
@@ -47,6 +49,7 @@ interface MatrixRow {
 export const SyahriyahListPage: React.FC = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const isPemilik = user?.role === 'pemilik';
+  const isSuperAdmin = user?.role === 'super_admin';
 
   useEffect(() => {
     authStore.getUser().then(setUser);
@@ -74,6 +77,7 @@ export const SyahriyahListPage: React.FC = () => {
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [strukModalOpen, setStrukModalOpen] = useState<boolean>(false);
   const [savedStrukData, setSavedStrukData] = useState<StrukData | null>(null);
+  const [keringananOpen, setKeringananOpen] = useState(false);
 
   const [matrixData, setMatrixData] = useState<MatrixRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -235,15 +239,26 @@ export const SyahriyahListPage: React.FC = () => {
           </p>
         </div>
 
-        {!isPemilik && (
-          <button
-            onClick={handleTambahPembayaran}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#059669] hover:bg-[#047857] text-white text-sm font-semibold transition-colors shadow-xs cursor-pointer"
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>+ Catat Pembayaran</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {isSuperAdmin && (
+            <button
+              onClick={() => setKeringananOpen(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-sm font-semibold transition-colors cursor-pointer"
+            >
+              <Gift className="w-4 h-4" />
+              <span>Keringanan</span>
+            </button>
+          )}
+          {!isPemilik && (
+            <button
+              onClick={handleTambahPembayaran}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#059669] hover:bg-[#047857] text-white text-sm font-semibold transition-colors shadow-xs cursor-pointer"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>+ Catat Pembayaran</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -755,6 +770,14 @@ export const SyahriyahListPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal Keringanan (Super Admin) */}
+      <KeringananModal
+        isOpen={keringananOpen}
+        onClose={() => setKeringananOpen(false)}
+        onSuccess={loadMatrix}
+        tahun={tahun}
+      />
     </div>
   );
 };

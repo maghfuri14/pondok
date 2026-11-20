@@ -165,6 +165,10 @@ export const BACKUP_SPECS: Record<string, BackupSpec> = {
   al_hidayah_kas: { label: 'Buku kas', validate: arrayOfRecords(['id']) },
   al_hidayah_kategori_kas: { label: 'Kategori kas', validate: isKategoriKas },
   al_hidayah_profil: { label: 'Profil pondok', validate: isProfil },
+  al_hidayah_syahriyah_waivers: {
+    label: 'Keringanan syahriyah',
+    validate: arrayOfRecords(['id', 'santri_id']),
+  },
   al_hidayah_tarif: { label: 'Tarif', validate: isTarif },
   al_hidayah_arsip_tarif: { label: 'Arsip tarif', validate: arrayOfRecords(['id']) },
   al_hidayah_users: { label: 'Akun pengguna', validate: isUserArray },
@@ -275,6 +279,13 @@ function validateRelations(data: Record<string, unknown>): string | null {
     if (Array.isArray(pembayaranIuran)) {
       for (const row of pembayaranIuran as Array<Record<string, unknown>>) {
         const error = cekSantri(row.santri_id, 'Pembayaran iuran');
+        if (error) return error;
+      }
+    }
+    const waivers = data.al_hidayah_syahriyah_waivers;
+    if (Array.isArray(waivers)) {
+      for (const row of waivers as Array<Record<string, unknown>>) {
+        const error = cekSantri(row.santri_id, 'Keringanan syahriyah');
         if (error) return error;
       }
     }

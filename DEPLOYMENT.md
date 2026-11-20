@@ -141,7 +141,7 @@ npm run test:e2e
 npm run test:smoke
 ```
 
-Smoke test mencakup: pembayaran (transaksi + kas + matriks + kuitansi), konkurensi nomor kuitansi, rollback pembatalan, dan penolakan 403 untuk role `pemilik`.
+Smoke test mencakup: pembayaran (transaksi + kas + matriks + kuitansi), konkurensi nomor kuitansi, rollback pembatalan, penolakan 403 untuk role `pemilik`, dan siklus keringanan Super Admin (potong → cabut → tagihan pulih).
 
 ## 9. Catatan operasional
 

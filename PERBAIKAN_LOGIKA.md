@@ -115,6 +115,15 @@ Dokumen ini merangkum perubahan logika bisnis terhadap versi awal, dan mana yang
 - **PWA lengkap**: ikon PNG 192/512 dibuat oleh `scripts/generate-icons.mjs`, manifest & service worker cache aset statik saja.
 - **Dependency audit bersih**: `xlsx` diganti tarball resmi SheetJS 0.20.3 (`npm audit` = 0).
 
+## 16. Keringanan syahriyah Super Admin (final 2026-11)
+- Hanya `super_admin` yang bisa memberikan/cabut keringanan (middleware server `requireRole('super_admin')`).
+- Keringanan berupa **potongan rupiah per bulan** untuk rentang bulan tertentu pada tahun berjalan; bukan persentase tetap.
+- Saat diberikan, `syahriyah_bulan.nominal_tagihan` bulan terkait diturunkan, status dihitung ulang, dan nominal asli disimpan di kolom `snapshot` (JSON) pada `keringanan_syahriyah`.
+- Bulan yang sudah memiliki keringanan tidak bisa diberi keringanan lagi (409) sampai keringanan lama dicabut.
+- Mencabut keringanan mengembalikan `nominal_tagihan` dari `snapshot` dan menghapus record; status dihitung ulang.
+- Setiap perubahan tercatat di `activity_log` (aksi `Ubah` / `Hapus`).
+- Smoke test mencakup siklus penuh: tagihan 300rb → 200rb → kembali 300rb.
+
 ## Belum dikerjakan / di luar cakupan
 - (Fitur pembatalan pembayaran sudah dibuat — lihat §10.)
 - Cek konfirmasi bendahara, template kuitansi A5 dan thermal, editor kop surat, backup otomatis dan manual, dan alur desain UI dari PRD.

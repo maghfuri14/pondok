@@ -231,6 +231,23 @@ export const syahriyahService = {
    * Semua validasi dijalankan dulu. Bila pencatatan kas gagal, seluruh
    * perubahan (matriks, transaksi, nomor kuitansi) dikembalikan.
    */
+  /** Ubah nominal tagihan satu bulan (dipakai fitur keringanan Super Admin, mode lokal). */
+  async setNominalTagihan(
+    santriId: string,
+    tahun: number,
+    bulan: number,
+    nominal: number
+  ): Promise<void> {
+    const stored = getStoredMatrixData();
+    const row = stored[santriId]?.[tahun]?.find((item) => item.bulan === bulan);
+    if (!row) throw new Error('Data tagihan bulan tidak ditemukan');
+    row.nominal_tagihan = nominal;
+    const dibayar = row.total_dibayar || 0;
+    row.status =
+      nominal > 0 && dibayar >= nominal ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
+    saveMatrixData(stored);
+  },
+
   async simpanPembayaranSyahriyah(
     santriId: string,
     itemsInput: SyahriyahItemInput[],

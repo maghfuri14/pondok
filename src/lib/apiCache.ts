@@ -96,6 +96,20 @@ export async function syncFromApi(): Promise<void> {
   );
 
   simpan('al_hidayah_syahriyah', groupMatrix(sebagaiArray(d.syahriyah_bulan), 'bulan'));
+  simpan(
+    'al_hidayah_syahriyah_waivers',
+    sebagaiArray(d.keringanan_syahriyah).map((row) => ({
+      id: row.id,
+      santri_id: row.santri_id,
+      tahun: Number(row.tahun),
+      bulan_mulai: Number(row.bulan_mulai),
+      bulan_selesai: Number(row.bulan_selesai),
+      nominal_per_bulan: Number(row.nominal_per_bulan),
+      ...(row.keterangan ? { keterangan: row.keterangan } : {}),
+      snapshot: teksJson(row.snapshot) || {},
+      created_at: row.created_at,
+    }))
+  );
   simpan('al_hidayah_kilatan', groupMatrix(sebagaiArray(d.kilatan_bulan), 'event'));
   simpan('al_hidayah_syahriyah_transaksi', sebagaiArray(d.transaksi_syahriyah).map(mapTransaksi));
   simpan('al_hidayah_kilatan_transaksi', sebagaiArray(d.transaksi_kilatan).map(mapTransaksi));

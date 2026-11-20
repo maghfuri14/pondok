@@ -69,7 +69,7 @@ aktivitasRoutes.get(
   requireAuth,
   asyncHandler(async (_req, res) => {
     const tables = [
-      'users', 'santri', 'santri_periode_nonaktif', 'syahriyah_bulan', 'transaksi_syahriyah',
+      'users', 'santri', 'santri_periode_nonaktif', 'syahriyah_bulan', 'keringanan_syahriyah', 'transaksi_syahriyah',
       'kilatan_bulan', 'transaksi_kilatan', 'buku_kas', 'kategori_kas', 'pendaftaran',
       'master_iuran', 'iuran_pembayaran', 'iuran_tambahan', 'kuitansi_counter',
       'pengaturan', 'arsip_tarif', 'print_log', 'activity_log',
@@ -99,7 +99,7 @@ aktivitasRoutes.post(
       'activity_log', 'print_log', 'arsip_tarif', 'pengaturan', 'iuran_pembayaran',
       'iuran_tambahan', 'master_iuran', 'transaksi_syahriyah', 'transaksi_kilatan',
       'buku_kas', 'kuitansi_counter', 'santri_periode_nonaktif', 'syahriyah_bulan',
-      'kilatan_bulan', 'pendaftaran', 'kategori_kas', 'santri',
+      'keringanan_syahriyah', 'kilatan_bulan', 'pendaftaran', 'kategori_kas', 'santri',
     ];
     const urutanTulis = [...urutanHapus].reverse();
 

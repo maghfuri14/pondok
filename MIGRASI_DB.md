@@ -26,6 +26,7 @@ Dokumen ini adalah **spesifikasi teknis Fase 3**: pemetaan kunci localStorage (`
 | `al_hidayah_santri` | `santri` | Data master santri. `periode_nonaktif` dipisah ke `santri_periode_nonaktif`. |
 | `al_hidayah_santri` (periode_nonaktif) | `santri_periode_nonaktif` | `santri_id` (FK), `mulai` (DATE), `sampai` (DATE, nullable). |
 | `al_hidayah_syahriyah` | `syahriyah_bulan` | Matriks tagihan bulanan. `santri_id` (FK), `tahun`, `bulan`, `nominal_tagihan`, `total_dibayar`, `status`. |
+| `al_hidayah_syahriyah_waivers` | `keringanan_syahriyah` | Keringanan Super Admin: rentang bulan, potongan per bulan, `snapshot` nominal asli, `created_by` (FK users). |
 | `al_hidayah_syahriyah_transaksi` | `transaksi_syahriyah` | `nomor_kuitansi` UNIQUE, `santri_id` (FK), `tanggal_bayar`, `items` (JSON), `transaksi_data` dipecah ke kolom. |
 | `al_hidayah_kilatan` | `kilatan_bulan` | Matriks tagihan event. `santri_id` (FK), `tahun`, `event`, `nominal_tagihan`, `total_dibayar`, `status`. |
 | `al_hidayah_kilatan_transaksi` | `transaksi_kilatan` | `nomor_kuitansi` UNIQUE, `santri_id` (FK), `tanggal_bayar`, `items` (JSON). |
@@ -138,6 +139,26 @@ CREATE TABLE IF NOT EXISTS syahriyah_bulan (
   UNIQUE KEY uq_syahriyah (santri_id, tahun, bulan),
   CONSTRAINT chk_bulan CHECK (bulan BETWEEN 1 AND 12),
   INDEX idx_syahriyah_tahun (tahun)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4b. keringanan syahriyah (Super Admin)
+CREATE TABLE IF NOT EXISTS keringanan_syahriyah (
+  id                 VARCHAR(36) PRIMARY KEY,
+  santri_id          VARCHAR(36) NOT NULL,
+  tahun              SMALLINT UNSIGNED NOT NULL,
+  bulan_mulai        TINYINT UNSIGNED NOT NULL,
+  bulan_selesai      TINYINT UNSIGNED NOT NULL,
+  nominal_per_bulan  BIGINT NOT NULL DEFAULT 0 COMMENT 'Potongan per bulan',
+  keterangan         TEXT NULL,
+  snapshot           JSON NULL COMMENT 'nominal_tagihan asli per bulan sebelum keringanan',
+  created_at         DATETIME NOT NULL,
+  created_by         VARCHAR(36) NULL,
+  FOREIGN KEY (santri_id) REFERENCES santri(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT chk_keringanan_bulan CHECK (
+    bulan_mulai BETWEEN 1 AND 12 AND bulan_selesai BETWEEN 1 AND 12 AND bulan_selesai >= bulan_mulai
+  ),
+  INDEX idx_keringanan_santri (santri_id, tahun)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 5. transaksi_syahriyah

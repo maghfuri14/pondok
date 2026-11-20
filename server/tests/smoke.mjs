@@ -101,6 +101,7 @@ async function main() {
   // Bersihkan sisa test sebelumnya.
   await sql.execute('DELETE FROM buku_kas');
   await sql.execute('DELETE FROM transaksi_syahriyah');
+  await sql.execute('DELETE FROM keringanan_syahriyah');
   await sql.execute('DELETE FROM syahriyah_bulan');
   await sql.execute('DELETE FROM santri WHERE id LIKE "smoke-%"');
   await sql.execute('DELETE FROM users WHERE username = "smokeview"');
@@ -108,6 +109,7 @@ async function main() {
 
   await seedSantri('smoke-s1', 'SMOKE001');
   await seedSantri('smoke-s2', 'SMOKE002');
+  await seedSantri('smoke-s3', 'SMOKE003');
 
   // 1. pembayaran & rollback dasar
   const pertama = await fibayar(admin, 'smoke-s1', 300000);
@@ -170,6 +172,47 @@ async function main() {
   });
   assert.equal(ditolak.status, 403, 'pemilik harus ditolak');
   console.log('✓ otorisasi: pemilik mendapat 403 untuk mutation');
+
+  // 5. keringanan Super Admin: potong tagihan lalu cabut → kembali ke nominal asli
+  const keringanan = await api('/api/keringanan/syahriyah', {
+    method: 'POST',
+    token: admin.token,
+    csrf: admin.csrf,
+    body: {
+      santri_id: 'smoke-s3',
+      tahun,
+      bulan_mulai: 1,
+      bulan_selesai: 1,
+      nominal_per_bulan: 100000,
+      keterangan: 'Smoke test',
+    },
+  });
+  assert.equal(keringanan.status, 201, `keringanan gagal: ${JSON.stringify(keringanan.payload)}`);
+
+  const [matKeringanan] = await sql.query(
+    'SELECT nominal_tagihan FROM syahriyah_bulan WHERE santri_id = ? AND tahun = ? AND bulan = 1',
+    ['smoke-s3', tahun]
+  );
+  assert.equal(Number(matKeringanan[0].nominal_tagihan), 200000, 'tagihan dipotong 100rb');
+
+  const daftarKeringanan = await api(`/api/keringanan?santri_id=smoke-s3&tahun=${tahun}`, {
+    token: admin.token,
+  });
+  assert.equal(daftarKeringanan.payload.data.length, 1);
+  console.log('✓ keringanan super admin: tagihan 300rb menjadi 200rb');
+
+  const cabut = await api(`/api/keringanan/${keringanan.payload.data.id}`, {
+    method: 'DELETE',
+    token: admin.token,
+    csrf: admin.csrf,
+  });
+  assert.equal(cabut.status, 204);
+  const [matPulih] = await sql.query(
+    'SELECT nominal_tagihan FROM syahriyah_bulan WHERE santri_id = ? AND tahun = ? AND bulan = 1',
+    ['smoke-s3', tahun]
+  );
+  assert.equal(Number(matPulih[0].nominal_tagihan), 300000, 'tagihan kembali setelah dicabut');
+  console.log('✓ cabut keringanan: nominal asli dipulihkan');
 
   console.log('\nSMOKE TEST LULUS');
 }

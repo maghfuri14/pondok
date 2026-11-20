@@ -9,6 +9,7 @@ import { authRoutes } from './routes/authRoutes';
 import { laporanRoutes } from './routes/laporanRoutes';
 import { masterRoutes } from './routes/masterRoutes';
 import { pembayaranRoutes } from './routes/pembayaranRoutes';
+import { keringananRoutes } from './routes/keringananRoutes';
 
 export function createApp() {
   const app = express();
@@ -31,6 +32,7 @@ export function createApp() {
   // Semua mutation lain wajib menyertakan header x-csrf-token dari /api/auth/me.
   api.use(requireCsrf);
   api.use('/pembayaran', pembayaranRoutes);
+  api.use('/keringanan', keringananRoutes);
   api.use('/master', masterRoutes);
   api.use('/laporan', laporanRoutes);
   api.use('/', aktivitasRoutes);

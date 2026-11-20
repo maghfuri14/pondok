@@ -55,6 +55,7 @@ Data disimpan di localStorage browser (prototype), tidak ada backend.
 - `apiRequest` punya opsi `skipCsrf` untuk endpoint sebelum login (`/api/auth/login`, `/api/auth/setup`). Tanpa ini, login API gagal karena CSRF mencoba `/api/auth/me`.
 - PWA: `public/manifest.webmanifest`, `public/icon.svg`, `public/sw.js` (cache aset statik saja; `/api/*` network-only). SW didaftarkan di `main.tsx` hanya saat `import.meta.env.PROD`. Ikon PNG 192/512 dibuat dengan `node scripts/generate-icons.mjs`.
 - `xlsx` dipakai dari tarball resmi SheetJS 0.20.3 (bukan versi npm lama yang punya advisory high). Jangan downgrade ke `xlsx@0.18.x`.
+- **Keringanan syahriyah (Super Admin)**: tabel `keringanan_syahriyah` menyimpan potongan per bulan + `snapshot` nominal asli; endpoint `/api/keringanan`; UI tombol "Keringanan" di halaman Syahriyah (`KeringananModal.tsx`). Mencabut keringanan mengembalikan `nominal_tagihan` dari snapshot. Mode lokal memakai `al_hidayah_syahriyah_waivers` + `syahriyahService.setNominalTagihan()`.
 - Detail setup & deploy produksi: `server/README.md` dan **`DEPLOYMENT.md`**.
 
 ## Perangkap & catatan opsional
