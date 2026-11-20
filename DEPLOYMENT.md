@@ -26,7 +26,7 @@ DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USER=pondok
 DB_PASSWORD=<password-kuat>
-DB_NAME=al_hidayah_prod
+DB_NAME=al_hidayah
 CORS_ORIGIN=https://pondok.example.com
 SESSION_SECRET=<64-96 karakter acak>
 SESSION_TTL_HOURS=12
@@ -51,7 +51,7 @@ VITE_API_URL=https://pondok.example.com/api
 
 ```bash
 # Buat DB & user (sekali)
-mysql -u root -p -e "CREATE DATABASE al_hidayah_prod CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER 'pondok'@'localhost' IDENTIFIED BY '...'; GRANT ALL ON al_hidayah_prod.* TO 'pondok'@'localhost'; FLUSH PRIVILEGES;"
+mysql -u root -p -e "CREATE DATABASE al_hidayah CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER 'pondok'@'localhost' IDENTIFIED BY '...'; GRANT ALL ON al_hidayah.* TO 'pondok'@'localhost'; FLUSH PRIVILEGES;"
 
 # Terapkan schema (idempoten; aman dijalankan ulang)
 npm run db:migrate

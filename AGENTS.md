@@ -12,7 +12,7 @@ Data disimpan di localStorage browser (prototype), tidak ada backend.
 - Satu test: `npx tsx --test tests/pembatalanPembayaran.test.ts`
 - Build: `npm run build` (warning chunk ~1.86 MB sudah dikenal, abaikan)
 - Backend (Fase 3): `npm run db:migrate` (jalankan DDL dari `MIGRASI_DB.md`), `npm run server` / `npm run dev:server` (API port 3001), `npm run lint:server`, `npx tsx --test server/tests/*.test.ts`
-- Smoke DB live: `npm run test:smoke` — butuh server berjalan + `.env` terisi. DB uji memakai `DB_NAME=al_hidayah_fase3` agar tidak menimpa database `al_hidayah` yang sudah ada (schema aplikasi lain).
+- Smoke DB live: `npm run test:smoke` — butuh server berjalan + `.env` terisi. `DB_NAME=al_hidayah` (database sudah dikosongkan & dimigrasi untuk aplikasi ini; script memuat `.env` lewat dotenv sehingga memakai DB yang sama dengan server).
 - Server terdeteksi berjalan di **MariaDB**; DDL memakai `CREATE TABLE IF NOT EXISTS` & collation `utf8mb4_unicode_ci` konsisten.
 - Urutan verifikasi setelah mengubah kode: `npm run lint && npm test && npm run build`
 

@@ -7,7 +7,7 @@ Implementasi Fase 3 berdasarkan `MIGRASI_DB.md`. Berjalan terpisah dari Vite (fr
 - **MariaDB 10.x / MySQL 8.x** (terdeteksi: MariaDB; collation DDL `utf8mb4_unicode_ci`)
 - Node.js 20+
 - Salin `.env.example` menjadi `.env`, lalu isi kredensial database dan `SESSION_SECRET`.
-- `.env` contoh memakai `DB_NAME=al_hidayah_fase3` — sengaja berbeda dari database `al_hidayah` yang sudah berisi schema aplikasi lain. **Jangan** mengarahkan DB_NAME ke database itu tanpa migrasi terencana.
+- `.env` contoh memakai `DB_NAME=al_hidayah` — database ini sudah dikosongkan dan dimigrasi khusus untuk aplikasi ini. Database lama dengan schema lain sudah tidak ada; jangan pakai nama itu untuk aplikasi berbeda tanpa migrasi terencana.
 
 ## Menjalankan
 
