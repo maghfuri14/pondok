@@ -14,14 +14,29 @@ import {
   ChevronRight,
   UserCheck,
   UserX,
+  Printer,
 } from 'lucide-react';
 import { Santri } from '../../types/santri';
+import { SyahriyahTransaksiRecord } from '../../types/syahriyah';
+import { KilatanTransaksiRecord } from '../../types/kilatan';
 import { santriService } from '../../lib/santriService';
+import { syahriyahService } from '../../lib/syahriyahService';
+import { kilatanService } from '../../lib/kilatanService';
+import { activityLogService, ActivityLogEntry } from '../../lib/activityLogService';
 import { buatPayloadToggleStatus } from '../../lib/santriStatus';
+import { formatRupiah } from '../../lib/formatter';
+import { todayLocal } from '../../lib/core';
 import { SantriFormModal } from './SantriFormModal';
 import { StatusToggleConfirmModal } from './StatusToggleConfirmModal';
 import { authStore, AuthUser } from '../../store/authStore';
 import { showToast } from '../../components/ui/Toast';
+import { StrukPembayaranCard, StrukData, StrukItem } from '../../components/ui/StrukPembayaranCard';
+import { PrintStatusBadge } from '../../components/ui/PrintStatusBadge';
+
+const BULAN_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
+];
 
 type ActiveTab = 'profil' | 'syahriyah' | 'kilatan' | 'timeline';
 
@@ -41,6 +56,11 @@ export const SantriDetailPage: React.FC = () => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [toggleModalOpen, setToggleModalOpen] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [riwayatSyahriyah, setRiwayatSyahriyah] = useState<SyahriyahTransaksiRecord[]>([]);
+  const [riwayatKilatan, setRiwayatKilatan] = useState<KilatanTransaksiRecord[]>([]);
+  const [aktivitasList, setAktivitasList] = useState<ActivityLogEntry[]>([]);
+  const [strukData, setStrukData] = useState<StrukData | null>(null);
+  const [strukOpen, setStrukOpen] = useState(false);
   const tabContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollTabs = (direction: 'left' | 'right') => {
@@ -67,6 +87,48 @@ export const SantriDetailPage: React.FC = () => {
     loadData();
   }, [id]);
 
+  // Riwayat & timeline khusus santri ini, dimuat ulang saat tab dibuka.
+  useEffect(() => {
+    if (!santri) return;
+    let active = true;
+    const nama = santri.nama.toLowerCase();
+    const nis = santri.nis.toLowerCase();
+
+    Promise.all([syahriyahService.getTransaksiList(), kilatanService.getTransaksiList()])
+      .then(([syahriyah, kilatan]) => {
+        if (!active) return;
+        const urut = (a: { transaksi_data?: { tanggal_bayar?: string } }, b: { transaksi_data?: { tanggal_bayar?: string } }) =>
+          (b.transaksi_data?.tanggal_bayar || '').localeCompare(a.transaksi_data?.tanggal_bayar || '');
+
+        setRiwayatSyahriyah(
+          syahriyah.filter((r) => r.santri_id === santri.id).sort(urut)
+        );
+        setRiwayatKilatan(
+          kilatan.filter((r) => r.santri_id === santri.id).sort(urut)
+        );
+        setAktivitasList(
+          activityLogService
+            .getAll()
+            .filter((item) => {
+              const deskripsi = (item.deskripsi || '').toLowerCase();
+              return (
+                item.ref_id === santri.id ||
+                deskripsi.includes(nama) ||
+                (nis.length > 0 && deskripsi.includes(nis))
+              );
+            })
+            .sort((a, b) => (b.waktu || '').localeCompare(a.waktu || ''))
+        );
+      })
+      .catch(() => {
+        if (active) showToast('Gagal memuat riwayat santri', 'error');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [santri?.id, activeTab]);
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
     try {
@@ -78,6 +140,17 @@ export const SantriDetailPage: React.FC = () => {
       });
     } catch {
       return dateStr;
+    }
+  };
+
+  const formatWaktu = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString('id-ID', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch {
+      return iso;
     }
   };
 
@@ -95,6 +168,50 @@ export const SantriDetailPage: React.FC = () => {
     } finally {
       setIsTogglingStatus(false);
     }
+  };
+
+  const lihatStrukSyahriyah = (r: SyahriyahTransaksiRecord) => {
+    const items: StrukItem[] = r.items.map((it) => ({
+      deskripsi: `Syahriyah ${BULAN_NAMES[it.bulan - 1] || it.bulan} ${it.tahun} (${it.jenis})`,
+      nominal: it.nominal,
+    }));
+    setStrukData({
+      idTransaksi: r.nomor_kuitansi || r.id,
+      tipe: 'Syahriyah',
+      namaPembayar: r.santri_nama,
+      nisPembayar: r.santri_nis || '-',
+      kategoriPembayar: 'Santri',
+      tanggalBayar: r.transaksi_data?.tanggal_bayar || todayLocal(),
+      metode: r.transaksi_data?.metode || 'Tunai',
+      items,
+      totalPembayaran: r.total_pembayaran,
+      keterangan: r.transaksi_data?.keterangan || '',
+      rawRecord: r,
+      santriObj: { nama: r.santri_nama, nis: r.santri_nis, kategori: 'Santri' },
+    });
+    setStrukOpen(true);
+  };
+
+  const lihatStrukKilatan = (r: KilatanTransaksiRecord) => {
+    const items: StrukItem[] = r.items.map((it) => ({
+      deskripsi: `Kilatan ${it.event} ${it.tahun} (${it.jenis})`,
+      nominal: it.nominal,
+    }));
+    setStrukData({
+      idTransaksi: r.nomor_kuitansi || r.id,
+      tipe: 'Kilatan',
+      namaPembayar: r.santri_nama,
+      nisPembayar: r.santri_nis || '-',
+      kategoriPembayar: 'Santri',
+      tanggalBayar: r.transaksi_data?.tanggal_bayar || todayLocal(),
+      metode: r.transaksi_data?.metode || 'Tunai',
+      items,
+      totalPembayaran: r.total_pembayaran,
+      keterangan: r.transaksi_data?.keterangan || '',
+      rawRecord: r,
+      santriObj: { nama: r.santri_nama, nis: r.santri_nis, kategori: 'Santri' },
+    });
+    setStrukOpen(true);
   };
 
   if (isLoading) {
@@ -367,44 +484,152 @@ export const SantriDetailPage: React.FC = () => {
         )}
 
         {activeTab === 'syahriyah' && (
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-8 sm:p-12 text-center shadow-xs">
-            <CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-[#0F172A] mb-1">Riwayat Syahriyah</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto mb-4">
-              Untuk melihat matriks lengkap dan mencatat pembayaran bulanan santri, silakan kunjungi menu Syahriyah di sidebar.
-            </p>
-            <button
-              onClick={() => navigate('/syahriyah')}
-              className="px-4 py-2 bg-[#059669] hover:bg-[#047857] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-            >
-              Buka Menu Syahriyah
-            </button>
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-xs overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-[#E2E8F0] bg-slate-50">
+              <div>
+                <h3 className="text-sm font-semibold text-[#0F172A]">Riwayat Pembayaran Syahriyah</h3>
+                <p className="text-[11px] text-slate-500">
+                  {riwayatSyahriyah.length} transaksi · total{' '}
+                  {formatRupiah(riwayatSyahriyah.reduce((sum, r) => sum + (r.total_pembayaran || 0), 0))}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/syahriyah')}
+                className="self-start px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-[11px] font-semibold hover:bg-white"
+              >
+                Buka Menu Syahriyah
+              </button>
+            </div>
+            {riwayatSyahriyah.length === 0 ? (
+              <div className="px-6 py-10 text-center">
+                <CreditCard className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-500">Belum ada pembayaran syahriyah untuk santri ini.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {riwayatSyahriyah.map((r) => (
+                  <div key={r.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-800">
+                        {formatDate(r.transaksi_data?.tanggal_bayar || '')} · {r.nomor_kuitansi || r.id}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {r.items.map((it) => `${BULAN_NAMES[it.bulan - 1] || it.bulan}${it.jenis === 'Sebagian' ? '*' : ''}`).join(', ')}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold font-mono text-emerald-700 whitespace-nowrap">
+                      {formatRupiah(r.total_pembayaran)}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <PrintStatusBadge transaksiId={r.id} compact />
+                      <button
+                        type="button"
+                        onClick={() => lihatStrukSyahriyah(r)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-emerald-200 text-emerald-700 text-[11px] font-semibold hover:bg-emerald-50"
+                      >
+                        <Printer className="w-3 h-3" /> Struk
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'kilatan' && (
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-8 sm:p-12 text-center shadow-xs">
-            <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-[#0F172A] mb-1">Riwayat Kilatan</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto mb-4">
-              Kelola dan catat transaksi pendaftaran program kilatan santri di modul Kilatan.
-            </p>
-            <button
-              onClick={() => navigate('/kilatan')}
-              className="px-4 py-2 bg-[#059669] hover:bg-[#047857] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-            >
-              Buka Menu Kilatan
-            </button>
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-xs overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-[#E2E8F0] bg-slate-50">
+              <div>
+                <h3 className="text-sm font-semibold text-[#0F172A]">Riwayat Pembayaran Kilatan</h3>
+                <p className="text-[11px] text-slate-500">
+                  {riwayatKilatan.length} transaksi · total{' '}
+                  {formatRupiah(riwayatKilatan.reduce((sum, r) => sum + (r.total_pembayaran || 0), 0))}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/kilatan')}
+                className="self-start px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-[11px] font-semibold hover:bg-white"
+              >
+                Buka Menu Kilatan
+              </button>
+            </div>
+            {riwayatKilatan.length === 0 ? (
+              <div className="px-6 py-10 text-center">
+                <History className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-500">Belum ada pembayaran kilatan untuk santri ini.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {riwayatKilatan.map((r) => (
+                  <div key={r.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-800">
+                        {formatDate(r.transaksi_data?.tanggal_bayar || '')} · {r.nomor_kuitansi || r.id}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {r.items.map((it) => `${it.event} ${it.tahun}${it.jenis === 'Sebagian' ? '*' : ''}`).join(', ')}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold font-mono text-emerald-700 whitespace-nowrap">
+                      {formatRupiah(r.total_pembayaran)}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <PrintStatusBadge transaksiId={r.id} compact />
+                      <button
+                        type="button"
+                        onClick={() => lihatStrukKilatan(r)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-emerald-200 text-emerald-700 text-[11px] font-semibold hover:bg-emerald-50"
+                      >
+                        <Printer className="w-3 h-3" /> Struk
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'timeline' && (
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-8 sm:p-12 text-center shadow-xs">
-            <Clock className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-[#0F172A] mb-1">Timeline Aktivitas</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Aktivitas santri dicatat secara otomatis saat transaksi atau pembaruan data dilakukan.
-            </p>
+          <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-xs overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#E2E8F0] bg-slate-50">
+              <h3 className="text-sm font-semibold text-[#0F172A]">Timeline Aktivitas</h3>
+              <p className="text-[11px] text-slate-500">{aktivitasList.length} aktivitas terkait santri ini</p>
+            </div>
+            {aktivitasList.length === 0 ? (
+              <div className="px-6 py-10 text-center">
+                <Clock className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-500">Belum ada aktivitas untuk santri ini.</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {aktivitasList.map((item) => (
+                  <li key={item.id} className="px-4 py-3 flex gap-3">
+                    <div className="mt-1 w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                          {item.modul}
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          item.aksi === 'Hapus' || item.aksi === 'Pembatalan'
+                            ? 'bg-red-50 text-red-700'
+                            : item.aksi === 'Pembayaran'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                        }`}>
+                          {item.aksi}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{formatWaktu(item.waktu)}</span>
+                      </div>
+                      <p className="text-sm text-slate-700 mt-1">{item.deskripsi}</p>
+                      {item.user && <p className="text-[11px] text-slate-400">Oleh: {item.user}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>
@@ -427,6 +652,20 @@ export const SantriDetailPage: React.FC = () => {
           onConfirm={confirmToggleStatus}
           onClose={() => setToggleModalOpen(false)}
         />
+      )}
+
+      {/* Modal Struk dari riwayat */}
+      {strukOpen && strukData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setStrukOpen(false)} />
+          <div className="relative w-full max-w-2xl bg-white h-full sm:h-auto sm:max-h-[92vh] rounded-none sm:rounded-2xl shadow-2xl z-10 overflow-hidden">
+            <StrukPembayaranCard
+              data={strukData}
+              onClose={() => setStrukOpen(false)}
+              onNewPayment={() => setStrukOpen(false)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
