@@ -455,9 +455,8 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
     printKwitansiHtml(savedRecord, selectedSantri);
   };
 
-  if (!isOpen) return null;
-
   // Tarif acuan dan sisa — dihitung async dari service
+  // Catatan: hook HARUS dipanggil sebelum `if (!isOpen) return null`.
   const [tarifBulan, setTarifBulan] = useState<number>(0);
   const [sisaBulanTerpilih, setSisaBulanTerpilih] = useState<number | null>(null);
 
@@ -490,6 +489,8 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
     };
     compute();
   }, [selectedSantri, itemInputs, currentYearRecords]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4">
