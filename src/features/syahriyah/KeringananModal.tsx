@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Gift, Search, Trash2, X } from 'lucide-react';
+import { Gift, Trash2, X } from 'lucide-react';
 import { Santri } from '../../types/santri';
 import { santriService } from '../../lib/santriService';
 import { showToast } from '../../components/ui/Toast';
+import { SantriPicker } from '../../components/ui/SantriPicker';
 import { formatRupiah } from '../../lib/formatter';
 import { SyahriyahWaiver, waiverService } from '../../lib/waiverService';
 
@@ -25,7 +26,6 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
   tahun,
 }) => {
   const [santriList, setSantriList] = useState<Santri[]>([]);
-  const [santriSearch, setSantriSearch] = useState('');
   const [santriId, setSantriId] = useState('');
   const [tahunInput, setTahunInput] = useState(tahun);
   const [bulanMulai, setBulanMulai] = useState(1);
@@ -51,7 +51,6 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setTahunInput(tahun);
-    setSantriSearch('');
     setIsLoading(true);
     santriService
       .getSantriList()
@@ -69,8 +68,8 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
   }, [isOpen, santriId, tahunInput]);
 
   const nominal = Number(nominalStr.replace(/\D/g, ''));
-  const santriTersaring = santriList.filter((s) =>
-    `${s.nama} ${s.nis}`.toLowerCase().includes(santriSearch.trim().toLowerCase())
+  const bentrok = waivers.some(
+    (w) => w.bulan_mulai <= bulanSelesai && w.bulan_selesai >= bulanMulai
   );
   const totalKeringanan = useMemo(
     () => nominal * Math.max(0, bulanSelesai - bulanMulai + 1),
@@ -138,36 +137,19 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Cari santri</label>
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={santriSearch}
-                onChange={(e) => setSantriSearch(e.target.value)}
-                placeholder="Nama atau NIS..."
-                className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-300 rounded-lg outline-none focus:border-[#059669]"
-              />
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              {santriTersaring.length} santri ditemukan
-            </p>
-          </div>
-
-          <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Santri</label>
-            <select
+            <SantriPicker
+              santriList={santriList}
               value={santriId}
-              onChange={(e) => setSantriId(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg outline-none focus:border-[#059669]"
-            >
-              <option value="">— Pilih santri —</option>
-              {santriTersaring.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nama} ({s.nis})
-                </option>
-              ))}
-            </select>
+              onChange={setSantriId}
+              disabled={isLoading}
+              placeholder={
+                isLoading ? 'Memuat daftar santri...' : 'Cari nama, NIS, atau kategori...'
+              }
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              {santriList.length} santri tersedia · gunakan ↑↓ lalu Enter untuk memilih
+            </p>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
@@ -232,6 +214,12 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
             />
           </div>
 
+          {bentrok && santriId && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Santri ini sudah memiliki keringanan pada rentang bulan tersebut. Cabut keringanan lama atau pilih rentang lain.
+            </div>
+          )}
+
           <div className="border-t border-slate-100 pt-3">
             <p className="text-xs font-semibold text-slate-700 mb-2">Keringanan aktif</p>
             {waivers.length === 0 ? (
@@ -273,7 +261,7 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
           <button
             type="button"
             onClick={(e) => void handleSubmit(e as unknown as React.FormEvent)}
-            disabled={isLoading || isSaving || !santriId}
+            disabled={isLoading || isSaving || !santriId || bentrok}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#059669] text-white text-xs font-semibold disabled:opacity-50"
           >
             <Gift className="w-4 h-4" />
