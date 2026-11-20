@@ -49,7 +49,7 @@ Data disimpan di localStorage browser (prototype), tidak ada backend.
 - Autentikasi: tabel `sessions`, cookie httpOnly `al_hidayah_sid`, CSRF header `x-csrf-token` untuk mutation, bcrypt cost 12. Role dicek di middleware (`server/src/auth.ts`, `server/src/roles.ts`).
 - Transaksi atomik (pengganti `snapshotKeys`) ada di `withTransaction()` (`server/src/db.ts`); counter kuitansi dikunci `FOR UPDATE` di `server/src/kuitansi.ts`.
 - Aturan bisnis frontend (`core.ts`, `kilatanService`) diport ke `server/src/validation.ts` — **jangan biarkan keduanya berbeda tanpa alasan**.
-- Frontend **default memakai API/DB** (`VITE_API_MODE=api` di `.env`, `.env.example`, `.env.production`). `.env.test` + `env.test.example` dipakai Playwright agar E2E tetap memakai data demo lokal (`npm run dev -- --mode test`).
+- Frontend: **development default `VITE_API_MODE=local`** (`.env`, `.env.example`) agar data demo & semua aksi berjalan seperti prototype. **Production memakai API** melalui `.env.production` (`VITE_API_MODE=api`) yang dibaca saat `npm run build`. `.env.test` dipakai Playwright.
 - Jalur tulis juga sudah API: arsip tarif (`PUT /api/master/arsip-tarif/replace`), iuran tambahan (`PUT /api/master/iuran-tambahan/replace`), kop surat & konfigurasi kwitansi (`PUT /api/master/pengaturan/:kunci`), serta backup/restore (`GET /api/backup`, `POST /api/restore`).
 - Di mode API, file backup berisi tabel DB (bukan key `al_hidayah_*`); restore backup format lokal ditolak dengan pesan jelas. Cache localStorage hanya dipakai sebagai pembaca yang disinkronkan.
 - `apiRequest` punya opsi `skipCsrf` untuk endpoint sebelum login (`/api/auth/login`, `/api/auth/setup`). Tanpa ini, login API gagal karena CSRF mencoba `/api/auth/me`.
