@@ -1,11 +1,15 @@
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { API_MODE } from './lib/apiClient';
 import { installApiBridge } from './lib/apiBridge';
+import { siapkanStorage } from './lib/storageMode';
 import './index.css';
 
 const render = () => {
   createRoot(document.getElementById('root')!).render(<App />);
 };
+
+siapkanStorage(API_MODE);
 
 // Pasang jembatan API sebelum render bila VITE_API_MODE=api.
 void installApiBridge()
