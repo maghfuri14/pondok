@@ -91,7 +91,13 @@ keringananRoutes.post(
         const dibayar = Number(matrix.total_dibayar);
         const tagihanBaru = Math.max(0, asli - nominalPerBulan);
         const status =
-          tagihanBaru > 0 && dibayar >= tagihanBaru ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
+          tagihanBaru === 0
+            ? 'Lunas'
+            : dibayar >= tagihanBaru
+              ? 'Lunas'
+              : dibayar > 0
+                ? 'Sebagian'
+                : 'Belum';
 
         snapshot[String(bulan)] = asli;
         await conn.execute(

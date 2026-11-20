@@ -219,7 +219,12 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
       return;
     }
     const rec = currentYearRecords.find((r) => r.bulan === bulan);
-    if (!rec || rec.status === 'Lunas') return;
+    if (!rec) return;
+    if (rec.keringanan && rec.nominal_tagihan === 0) {
+      showToast('Bulan ini bebas tagihan (keringanan penuh), tidak perlu dibayar', 'info');
+      return;
+    }
+    if (rec.status === 'Lunas') return;
 
     const key = `${selectedYear}-${bulan}`;
     if (itemInputs[key]) {
@@ -235,7 +240,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         selectedYear,
         bulan
       );
-      const nominalBayar = sisa > 0 ? sisa : fallbackTarif;
+      const nominalBayar = sisa > 0 ? sisa : rec?.keringanan ? 0 : fallbackTarif;
       setItemInputs((prev) => ({
         ...prev,
         [key]: {
@@ -260,7 +265,9 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
     const base =
       sisa > 0
         ? sisa
-        : await getTarifSyahriyah(selectedSantri?.kategori || 'Mukim', item.tahun, item.bulan);
+        : rec?.keringanan
+          ? 0
+          : await getTarifSyahriyah(selectedSantri?.kategori || 'Mukim', item.tahun, item.bulan);
     setItemInputs((prev) => ({
       ...prev,
       [key]: {

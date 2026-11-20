@@ -207,7 +207,8 @@ export const syahriyahService = {
           }
 
           let status: StatusSyahriyah = 'Belum';
-          if (nominal > 0 && dibayar >= nominal) status = 'Lunas';
+          if (nominal === 0) status = 'Lunas';
+          else if (dibayar >= nominal) status = 'Lunas';
           else if (dibayar > 0) status = 'Sebagian';
 
           return { ...r, nominal_tagihan: nominal, total_dibayar: dibayar, status };
@@ -252,7 +253,9 @@ export const syahriyahService = {
     row.keringanan = keringanan;
     const dibayar = row.total_dibayar || 0;
     row.status =
-      nominal > 0 && dibayar >= nominal ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
+      nominal === 0 ? 'Lunas'
+        : nominal > 0 && dibayar >= nominal ? 'Lunas'
+          : dibayar > 0 ? 'Sebagian' : 'Belum';
     saveMatrixData(stored);
   },
 
@@ -314,7 +317,7 @@ export const syahriyahService = {
 
       const current = yearRecords[index];
       let nominalTagihan = current.nominal_tagihan || 0;
-      if (nominalTagihan <= 0) {
+      if (nominalTagihan <= 0 && !current.keringanan) {
         nominalTagihan = await getTarifSyahriyah(santri.kategori, item.tahun, item.bulan);
       }
       const sudahDibayar = Math.max(0, current.total_dibayar || 0);
