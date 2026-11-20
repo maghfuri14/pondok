@@ -4,6 +4,7 @@
  * Lalu: node server/tests/smoke.mjs
  */
 import assert from 'node:assert/strict';
+import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
 const API = 'http://localhost:3001';

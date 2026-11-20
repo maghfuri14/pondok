@@ -55,13 +55,13 @@ Data disimpan di localStorage browser (prototype), tidak ada backend.
 - `apiRequest` punya opsi `skipCsrf` untuk endpoint sebelum login (`/api/auth/login`, `/api/auth/setup`). Tanpa ini, login API gagal karena CSRF mencoba `/api/auth/me`.
 - PWA: `public/manifest.webmanifest`, `public/icon.svg`, `public/sw.js` (cache aset statik saja; `/api/*` network-only). SW didaftarkan di `main.tsx` hanya saat `import.meta.env.PROD`. Ikon PNG 192/512 dibuat dengan `node scripts/generate-icons.mjs`.
 - `xlsx` dipakai dari tarball resmi SheetJS 0.20.3 (bukan versi npm lama yang punya advisory high). Jangan downgrade ke `xlsx@0.18.x`.
-- Detail setup: `server/README.md`.
+- Detail setup & deploy produksi: `server/README.md` dan **`DEPLOYMENT.md`**.
 
 ## Perangkap & catatan opsional
-- **Backup berisi password plaintext** (`al_hidayah_users`). Peringatkan pengguna; belum aman untuk data keuangan nyata tanpa backend.
-- Otorisasi hanya di UI (tombol disembunyikan per role), tidak di service layer. Jangan asumsikan ada otentikasi di sisi layanan.
-- Race condition multi-tab (baca-ubah-tulis tanpa kunci) — belum mitigasi.
+- **Backup mode lokal berisi password plaintext** (`al_hidayah_users`); backup produksi lewat `/api/backup` **tidak** mengirim `password_hash` sama sekali. Jangan pernah menyalin file backup lokal ke produksi.
+- **Mode lokal**: otorisasi hanya di UI (tombol disembunyikan per role). **Mode API produksi**: otorisasi ada di middleware server (`requireAuth`/`requireRole`) — jangan menganggap UI sebagai satu-satunya pengaman.
+- **Mode lokal** masih punya race condition multi-tab; **mode API** sudah memakai transaksi InnoDB + `SELECT ... FOR UPDATE` pada counter kuitansi.
 - `npm install` tanpa `--legacy-peer-deps` bisa gagal (React 19).
-- Bukan repo git; folder root berisi `*.zip` berkopian aplikasi — jangan dihapus.
+- Folder root berisi `*.zip` berkopian aplikasi — jangan dihapus. Repo sekarang sudah terhubung ke `origin` GitHub.
 - Strict JSON di `core.ts` (`readJsonStrict`): data rusak melempar `DataRusakError`, tidak direset diam-diam.
 - TypeScript v7; build chunk >500 kB memicu warning (backlog).
