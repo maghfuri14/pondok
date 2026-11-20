@@ -1064,8 +1064,8 @@ export const LaporanPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {keuanganData.list.map((k) => (
-                    <tr key={k.tanggal + k.keterangan}>
+                  {keuanganData.list.map((k, idx) => (
+                    <tr key={`${k.tanggal}-${idx}`}>
                       <td className="px-4 py-3 text-slate-700">{k.tanggal}</td>
                       <td className="px-4 py-3 text-slate-700 capitalize">{k.kategori_nama}</td>
                       <td className="px-4 py-3 text-slate-700">{k.keterangan || '-'}</td>
