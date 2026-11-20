@@ -2,8 +2,6 @@ import { readJsonStrict } from './core';
 import { apiRequest, isApiMode } from './apiClient';
 import { syncFromApi } from './apiCache';
 import { syahriyahService } from './syahriyahService';
-import { santriService } from './santriService';
-import { activityLogService } from './activityLogService';
 
 export interface SyahriyahWaiver {
   id: string;
@@ -118,14 +116,6 @@ export const waiverService = {
       created_at: new Date().toISOString(),
     };
     tulisLokal([waiver, ...list]);
-
-    const santri = await santriService.getSantriById(input.santri_id).catch(() => null);
-    activityLogService.catat({
-      modul: 'Syahriyah',
-      aksi: 'Ubah',
-      deskripsi: `Keringanan ${santri?.nama || input.santri_id} bulan ${input.bulan_mulai}–${input.bulan_selesai}/${input.tahun} Rp${input.nominal_per_bulan.toLocaleString('id-ID')}/bulan`,
-      ref_id: input.santri_id,
-    });
     return waiver;
   },
 
@@ -149,13 +139,5 @@ export const waiverService = {
       );
     }
     tulisLokal(list.filter((w) => w.id !== id));
-
-    const santri = await santriService.getSantriById(waiver.santri_id).catch(() => null);
-    activityLogService.catat({
-      modul: 'Syahriyah',
-      aksi: 'Hapus',
-      deskripsi: `Mencabut keringanan syahriyah ${santri?.nama || waiver.santri_id} (${waiver.tahun})`,
-      ref_id: waiver.santri_id,
-    });
   },
 };

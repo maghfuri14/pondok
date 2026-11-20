@@ -43,6 +43,18 @@ const BULAN_NAMES = [
 
 type ActiveTab = 'profil' | 'syahriyah' | 'kilatan' | 'iuran' | 'timeline';
 
+function formatPeriodeIuran(r: IuranPembayaran): string {
+  if (r.periode_bulan) {
+    const [year, month] = r.periode_bulan.split('-').map(Number);
+    if (Number.isFinite(year) && Number.isFinite(month) && month >= 1 && month <= 12) {
+      return `${BULAN_NAMES[month - 1]} ${year}`;
+    }
+    return r.periode_bulan;
+  }
+  if (r.periode_tahun) return String(r.periode_tahun);
+  return '—';
+}
+
 export const SantriDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -98,12 +110,8 @@ export const SantriDetailPage: React.FC = () => {
     const nama = santri.nama.toLowerCase();
     const nis = santri.nis.toLowerCase();
 
-    Promise.all([
-      syahriyahService.getTransaksiList(),
-      kilatanService.getTransaksiList(),
-      Promise.resolve(iuranPembayaranService.getAll()),
-    ])
-      .then(([syahriyah, kilatan, iuran]) => {
+    Promise.all([syahriyahService.getTransaksiList(), kilatanService.getTransaksiList()])
+      .then(([syahriyah, kilatan]) => {
         if (!active) return;
         const urut = (a: { transaksi_data?: { tanggal_bayar?: string } }, b: { transaksi_data?: { tanggal_bayar?: string } }) =>
           (b.transaksi_data?.tanggal_bayar || '').localeCompare(a.transaksi_data?.tanggal_bayar || '');
@@ -115,7 +123,8 @@ export const SantriDetailPage: React.FC = () => {
           kilatan.filter((r) => r.santri_id === santri.id).sort(urut)
         );
         setRiwayatIuran(
-          iuran
+          iuranPembayaranService
+            .getAll()
             .filter((r) => r.santri_id === santri.id)
             .sort((a, b) => (b.tanggal_bayar || '').localeCompare(a.tanggal_bayar || ''))
         );
@@ -228,24 +237,20 @@ export const SantriDetailPage: React.FC = () => {
   };
 
   const lihatStrukIuran = (r: IuranPembayaran) => {
-    const periode = r.periode_bulan
-      ? `${BULAN_NAMES[Number(r.periode_bulan.slice(5, 7)) - 1] || r.periode_bulan} ${r.periode_bulan.slice(0, 4)}`
-      : r.periode_tahun
-        ? String(r.periode_tahun)
-        : 'Sekali';
+    const periode = formatPeriodeIuran(r);
     setStrukData({
       idTransaksi: r.id,
       tipe: 'Iuran',
       namaPembayar: r.nama_pembayar,
       nisPembayar: r.santri_id ? 'Santri' : '-',
       kategoriPembayar: r.tipe_pembayar === 'santri' ? 'Santri' : 'Umum',
-      tanggalBayar: r.tanggal_bayar,
+      tanggalBayar: r.tanggal_bayar || todayLocal(),
       metode: r.metode || 'Tunai',
-      items: [{ deskripsi: `${r.iuran_nama} (${periode})`, nominal: r.nominal }],
+      items: [{ deskripsi: `${r.iuran_nama}${periode !== '—' ? ` (${periode})` : ''}`, nominal: r.nominal }],
       totalPembayaran: r.nominal,
       keterangan: r.keterangan || '',
       rawRecord: r,
-      santriObj: { nama: r.nama_pembayar, nis: 'Santri', kategori: 'Santri' },
+      santriObj: { nama: santri?.nama || r.nama_pembayar, nis: santri?.nis || '', kategori: 'Santri' },
     });
     setStrukOpen(true);
   };
@@ -659,24 +664,22 @@ export const SantriDetailPage: React.FC = () => {
                         {formatDate(r.tanggal_bayar)} · {r.iuran_nama}
                       </p>
                       <p className="text-[11px] text-slate-500 truncate">
-                        {r.periode_bulan
-                          ? `${BULAN_NAMES[Number(r.periode_bulan.slice(5, 7)) - 1] || r.periode_bulan} ${r.periode_bulan.slice(0, 4)}`
-                          : r.periode_tahun
-                            ? String(r.periode_tahun)
-                            : 'Sekali'}{' '}
-                        · {r.metode || 'Tunai'} · {r.tipe_pembayar === 'santri' ? 'Santri' : 'Umum'}
+                        {r.nama_pembayar} · {formatPeriodeIuran(r)} · {r.metode || 'Tunai'}
                       </p>
                     </div>
                     <span className="text-sm font-semibold font-mono text-emerald-700 whitespace-nowrap">
                       {formatRupiah(r.nominal)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => lihatStrukIuran(r)}
-                      className="self-start inline-flex items-center gap-1 px-2 py-1 rounded-md border border-emerald-200 text-emerald-700 text-[11px] font-semibold hover:bg-emerald-50"
-                    >
-                      <Printer className="w-3 h-3" /> Struk
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <PrintStatusBadge transaksiId={r.id} compact />
+                      <button
+                        type="button"
+                        onClick={() => lihatStrukIuran(r)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-emerald-200 text-emerald-700 text-[11px] font-semibold hover:bg-emerald-50"
+                      >
+                        <Printer className="w-3 h-3" /> Struk
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -706,15 +709,13 @@ export const SantriDetailPage: React.FC = () => {
                           {item.modul}
                         </span>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          (item.deskripsi || '').toLowerCase().includes('keringanan')
-                            ? 'bg-amber-50 text-amber-700'
-                            : item.aksi === 'Hapus' || item.aksi === 'Pembatalan'
-                              ? 'bg-red-50 text-red-700'
-                              : item.aksi === 'Pembayaran'
-                                ? 'bg-blue-50 text-blue-700'
-                                : 'bg-emerald-50 text-emerald-700'
+                          item.aksi === 'Hapus' || item.aksi === 'Pembatalan'
+                            ? 'bg-red-50 text-red-700'
+                            : item.aksi === 'Pembayaran'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
                         }`}>
-                          {(item.deskripsi || '').toLowerCase().includes('keringanan') ? 'Keringanan' : item.aksi}
+                          {item.aksi}
                         </span>
                         <span className="text-[10px] text-slate-400">{formatWaktu(item.waktu)}</span>
                       </div>
