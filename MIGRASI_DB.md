@@ -135,11 +135,14 @@ CREATE TABLE IF NOT EXISTS syahriyah_bulan (
   nominal_tagihan BIGINT NOT NULL DEFAULT 0,
   total_dibayar   BIGINT NOT NULL DEFAULT 0,
   status          ENUM('Lunas','Sebagian','Belum') NOT NULL DEFAULT 'Belum',
+  keringanan      TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = nominal_tagihan final hasil keringanan',
   FOREIGN KEY (santri_id) REFERENCES santri(id) ON DELETE CASCADE,
   UNIQUE KEY uq_syahriyah (santri_id, tahun, bulan),
   CONSTRAINT chk_bulan CHECK (bulan BETWEEN 1 AND 12),
   INDEX idx_syahriyah_tahun (tahun)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE syahriyah_bulan ADD COLUMN IF NOT EXISTS keringanan TINYINT(1) NOT NULL DEFAULT 0;
 
 -- 4b. keringanan syahriyah (Super Admin)
 CREATE TABLE IF NOT EXISTS keringanan_syahriyah (

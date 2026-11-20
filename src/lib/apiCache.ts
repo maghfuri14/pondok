@@ -32,6 +32,7 @@ function groupMatrix(rows: Row[], field: 'bulan' | 'event'): Record<string, Reco
       nominal_tagihan: Number(row.nominal_tagihan),
       total_dibayar: Number(row.total_dibayar),
       status: row.status,
+      ...(row.keringanan ? { keringanan: true } : {}),
     });
   }
   return result;

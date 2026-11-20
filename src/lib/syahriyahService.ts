@@ -194,7 +194,13 @@ export const syahriyahService = {
 
           let nominal: number;
           if (dibayar === 0) {
-            nominal = tarifBerlaku > 0 ? tarifBerlaku : r.nominal_tagihan || 0;
+            // Bulan yang sudah dikeringankan memakai nominal final dari matriks,
+            // jangan ditimpa tarif aktif.
+            nominal = r.keringanan
+              ? r.nominal_tagihan || 0
+              : tarifBerlaku > 0
+                ? tarifBerlaku
+                : r.nominal_tagihan || 0;
           } else {
             nominal = r.nominal_tagihan && r.nominal_tagihan > 0 ? r.nominal_tagihan : tarifBerlaku;
             if (nominal > 0 && dibayar > nominal) dibayar = nominal;
@@ -236,12 +242,14 @@ export const syahriyahService = {
     santriId: string,
     tahun: number,
     bulan: number,
-    nominal: number
+    nominal: number,
+    keringanan = true
   ): Promise<void> {
     const stored = getStoredMatrixData();
     const row = stored[santriId]?.[tahun]?.find((item) => item.bulan === bulan);
     if (!row) throw new Error('Data tagihan bulan tidak ditemukan');
     row.nominal_tagihan = nominal;
+    row.keringanan = keringanan;
     const dibayar = row.total_dibayar || 0;
     row.status =
       nominal > 0 && dibayar >= nominal ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';

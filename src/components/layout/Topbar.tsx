@@ -27,7 +27,7 @@ export const Topbar: React.FC<TopbarProps> = ({ user, onMenuClick }) => {
       const isInput =
         tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || isEditable;
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.key === '/')) {
         e.preventDefault();
         setSearchOpen(true);
         return;

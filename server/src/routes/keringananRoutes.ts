@@ -95,7 +95,7 @@ keringananRoutes.post(
 
         snapshot[String(bulan)] = asli;
         await conn.execute(
-          'UPDATE syahriyah_bulan SET nominal_tagihan = ?, status = ? WHERE id = ?',
+          'UPDATE syahriyah_bulan SET nominal_tagihan = ?, status = ?, keringanan = 1 WHERE id = ?',
           [tagihanBaru, status, matrix.id]
         );
       }
@@ -155,7 +155,7 @@ keringananRoutes.delete(
         const status =
           Number(nominal) > 0 && dibayar >= Number(nominal) ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
         await conn.execute(
-          'UPDATE syahriyah_bulan SET nominal_tagihan = ?, status = ? WHERE id = ?',
+          'UPDATE syahriyah_bulan SET nominal_tagihan = ?, status = ?, keringanan = 0 WHERE id = ?',
           [Number(nominal), status, matrix.id]
         );
       }

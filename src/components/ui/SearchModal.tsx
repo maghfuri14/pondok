@@ -28,6 +28,7 @@ export const SearchModal: React.FC<{ isOpen: boolean; onClose: () => void }> = (
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -46,7 +47,8 @@ export const SearchModal: React.FC<{ isOpen: boolean; onClose: () => void }> = (
     }
 
     setLoading(true);
-    const q = query.toLowerCase();
+    setSearchError('');
+    const q = query.toLowerCase().trim();
 
     const run = async () => {
       try {
@@ -157,18 +159,22 @@ export const SearchModal: React.FC<{ isOpen: boolean; onClose: () => void }> = (
             })
           );
 
+        if (!active) return [];
         if (filterGroup !== 'Semua') {
           return items.filter((i) => i.group === filterGroup);
         }
         return items;
       } catch {
+        if (active) setSearchError('Gagal memuat data pencarian. Coba lagi.');
         return [];
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
-    run();
+    void run().then((items) => {
+      if (active) setResults(items);
+    });
     return () => {
       active = false;
     };
@@ -280,7 +286,7 @@ export const SearchModal: React.FC<{ isOpen: boolean; onClose: () => void }> = (
             </div>
           ) : results.length === 0 ? (
             <div className="px-4 py-10 text-center">
-              <p className="text-sm text-slate-500">Tidak ada hasil untuk &quot;{query}&quot;</p>
+              <p className="text-sm text-rose-600">{searchError || `Tidak ada hasil untuk "${query}"`}</p>
             </div>
           ) : (
             <ul className="divide-y divide-slate-100">

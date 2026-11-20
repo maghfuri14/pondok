@@ -184,15 +184,21 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
    * - Sudah ada bayar → pakai nominal_tagihan historis di matrix
    */
   const getSisaTagihan = async (
-    rec: { nominal_tagihan: number; total_dibayar: number; tahun?: number },
+    rec: {
+      nominal_tagihan: number;
+      total_dibayar: number;
+      tahun?: number;
+      keringanan?: boolean;
+    },
     bulan: number
   ) => {
     const kategori = selectedSantri?.kategori || 'Mukim';
     const tahun = rec.tahun ?? selectedYear;
     const tarifPeriode = await getTarifSyahriyah(kategori, tahun, bulan);
     const dibayar = Math.max(0, rec.total_dibayar || 0);
-    const nominal =
-      dibayar === 0
+    const nominal = rec.keringanan
+      ? rec.nominal_tagihan || 0
+      : dibayar === 0
         ? tarifPeriode > 0
           ? tarifPeriode
           : rec.nominal_tagihan || 0
@@ -472,7 +478,9 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         const it = list[0];
         const rec = currentYearRecords.find((r) => r.bulan === it.bulan);
         const live = await getTarifSyahriyah(selectedSantri.kategori, it.tahun, it.bulan);
-        if (rec && (rec.total_dibayar || 0) > 0 && rec.nominal_tagihan > 0) {
+        if (rec?.keringanan) {
+          setTarifBulan(rec.nominal_tagihan);
+        } else if (rec && (rec.total_dibayar || 0) > 0 && rec.nominal_tagihan > 0) {
           setTarifBulan(rec.nominal_tagihan);
         } else {
           setTarifBulan(live > 0 ? live : rec?.nominal_tagihan || 0);

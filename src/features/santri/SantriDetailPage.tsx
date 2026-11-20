@@ -422,7 +422,7 @@ export const SantriDetailPage: React.FC = () => {
       {/* Modal Konfirmasi Ubah Status */}
       {isAdmin && santri && (
         <StatusToggleConfirmModal
-          santri={santri}
+          santri={toggleModalOpen ? santri : null}
           isLoading={isTogglingStatus}
           onConfirm={confirmToggleStatus}
           onClose={() => setToggleModalOpen(false)}

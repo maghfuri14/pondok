@@ -6,6 +6,8 @@ export interface SyahriyahBulan {
   nominal_tagihan: number;
   total_dibayar: number;
   status: StatusSyahriyah;
+  /** Ditandai saat Super Admin memberikan keringanan (nominal_tagihan sudah final). */
+  keringanan?: boolean;
 }
 
 export interface SyahriyahItemInput {

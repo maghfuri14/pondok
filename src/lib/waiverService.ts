@@ -134,7 +134,8 @@ export const waiverService = {
         waiver.santri_id,
         waiver.tahun,
         Number(bulan),
-        Number(nominal)
+        Number(nominal),
+        false
       );
     }
     tulisLokal(list.filter((w) => w.id !== id));
