@@ -49,8 +49,10 @@ Data disimpan di localStorage browser (prototype), tidak ada backend.
 - Autentikasi: tabel `sessions`, cookie httpOnly `al_hidayah_sid`, CSRF header `x-csrf-token` untuk mutation, bcrypt cost 12. Role dicek di middleware (`server/src/auth.ts`, `server/src/roles.ts`).
 - Transaksi atomik (pengganti `snapshotKeys`) ada di `withTransaction()` (`server/src/db.ts`); counter kuitansi dikunci `FOR UPDATE` di `server/src/kuitansi.ts`.
 - Aturan bisnis frontend (`core.ts`, `kilatanService`) diport ke `server/src/validation.ts` — **jangan biarkan keduanya berbeda tanpa alasan**.
-- Frontend **sudah bisa diarahkan ke API** dengan `VITE_API_MODE=api` (default `local`). Jembatan ada di `src/lib/apiBridge.ts`; client di `src/lib/apiClient.ts`; cache localStorage disinkronkan dari `/api/backup` via `src/lib/apiCache.ts`.
-- Di mode API, semua jalur **tulis** ke API; jalur **baca** memakai cache localStorage yang disegarkan saat startup, setelah mutasi, dan tiap 30 detik. Service laporan/dashboard/kop-surat tidak perlu diubah.
+- Frontend **default memakai API/DB** (`VITE_API_MODE=api` di `.env`, `.env.example`, `.env.production`). `.env.test` + `env.test.example` dipakai Playwright agar E2E tetap memakai data demo lokal (`npm run dev -- --mode test`).
+- Jalur tulis juga sudah API: arsip tarif (`PUT /api/master/arsip-tarif/replace`), iuran tambahan (`PUT /api/master/iuran-tambahan/replace`), kop surat & konfigurasi kwitansi (`PUT /api/master/pengaturan/:kunci`), serta backup/restore (`GET /api/backup`, `POST /api/restore`).
+- Di mode API, file backup berisi tabel DB (bukan key `al_hidayah_*`); restore backup format lokal ditolak dengan pesan jelas. Cache localStorage hanya dipakai sebagai pembaca yang disinkronkan.
+- `apiRequest` punya opsi `skipCsrf` untuk endpoint sebelum login (`/api/auth/login`, `/api/auth/setup`). Tanpa ini, login API gagal karena CSRF mencoba `/api/auth/me`.
 - PWA: `public/manifest.webmanifest`, `public/icon.svg`, `public/sw.js` (cache aset statik saja; `/api/*` network-only). SW didaftarkan di `main.tsx` hanya saat `import.meta.env.PROD`. Ikon PNG 192/512 dibuat dengan `node scripts/generate-icons.mjs`.
 - `xlsx` dipakai dari tarball resmi SheetJS 0.20.3 (bukan versi npm lama yang punya advisory high). Jangan downgrade ke `xlsx@0.18.x`.
 - Detail setup: `server/README.md`.

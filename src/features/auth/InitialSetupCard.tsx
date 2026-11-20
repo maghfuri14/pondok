@@ -6,6 +6,7 @@ import { ErrorAlert } from '../../components/ui/ErrorAlert';
 import { pengaturanService } from '../../lib/pengaturanService';
 import { authStore } from '../../store/authStore';
 import { apiSetup, isApiMode } from '../../lib/apiClient';
+import { syncFromApi } from '../../lib/apiCache';
 
 /**
  * Setup pertama kali untuk build produksi yang belum memiliki akun.
@@ -44,6 +45,7 @@ export const InitialSetupCard: React.FC = () => {
     try {
       if (isApiMode()) {
         await apiSetup(cleanNama, cleanUsername, password);
+        await syncFromApi().catch(() => undefined);
         authStore.setUser({
           username: cleanUsername,
           role: 'super_admin',

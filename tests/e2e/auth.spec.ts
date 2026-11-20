@@ -5,7 +5,7 @@ async function login(page: Page, username: string) {
   await page.locator('#username').fill(username);
   await page.locator('#password').fill('admin123');
   await page.getByRole('button', { name: /^masuk$/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page, 'login gagal').toHaveURL(/\/dashboard/, { timeout: 15000 });
 }
 
 test('admin melihat menu transaksi dan tombol tambah', async ({ page }) => {

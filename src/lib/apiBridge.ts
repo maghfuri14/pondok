@@ -10,6 +10,7 @@ import { pendaftaranService } from './pendaftaranService';
 import { pengaturanService, masterIuranService } from './pengaturanService';
 import { activityLogService } from './activityLogService';
 import { printLogService } from './printLogService';
+import { kopSuratService } from './kopSuratService';
 
 type Row = Record<string, any>;
 
@@ -45,7 +46,12 @@ async function tulisDanSinkron(path: string, body: unknown, method: 'POST' | 'PU
  */
 export async function installApiBridge(): Promise<void> {
   if (!isApiMode()) return;
-  await syncFromApi();
+  // Saat halaman pertama dibuka belum ada sesi — jangan gagalkan pemasangan bridge.
+  try {
+    await syncFromApi();
+  } catch {
+    // 401 = belum login; data akan disinkronkan setelah login berhasil.
+  }
 
   /* ---- Auth ---- */
   (authStore as any).getUser = async (): Promise<AuthUser | null> => {
@@ -202,6 +208,10 @@ export async function installApiBridge(): Promise<void> {
     async getIuranTambahan() {
       return localList('al_hidayah_iuran_tambahan');
     },
+    async saveIuranTambahan(list: Row[]) {
+      await tulisDanSinkron('/api/master/iuran-tambahan/replace', { list }, 'PUT');
+      return list;
+    },
   });
 
   /* ---- Pendaftaran ---- */
@@ -255,6 +265,9 @@ export async function installApiBridge(): Promise<void> {
     async getArsipTarif() {
       return localList('al_hidayah_arsip_tarif');
     },
+    async saveArsipTarif(list: Row[]) {
+      await tulisDanSinkron('/api/master/arsip-tarif/replace', { list }, 'PUT');
+    },
     async getUsers() {
       return localList('al_hidayah_users');
     },
@@ -292,6 +305,21 @@ export async function installApiBridge(): Promise<void> {
       await del(`/api/master/master-iuran/${id}`);
       await syncFromApi();
       return true;
+    },
+  });
+
+  /* ---- Kop surat & kwitansi ---- */
+  Object.assign(kopSuratService as any, {
+    save(config: Row, image: string | null) {
+      const nilai = {
+        version: 1,
+        config: { ...config, updatedAt: new Date().toISOString() },
+        image,
+        updatedAt: new Date().toISOString(),
+      };
+      void put('/api/master/pengaturan/kop_surat', { nilai })
+        .then(() => syncFromApi())
+        .catch(() => undefined);
     },
   });
 

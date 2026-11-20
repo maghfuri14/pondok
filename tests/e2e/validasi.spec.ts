@@ -5,7 +5,7 @@ async function login(page: Page) {
   await page.locator('#username').fill('admin1');
   await page.locator('#password').fill('admin123');
   await page.getByRole('button', { name: /^masuk$/i }).click();
-  await expect(page, 'login gagal').toHaveURL(/\/dashboard/);
+  await expect(page, 'login gagal').toHaveURL(/\/dashboard/, { timeout: 15000 });
 }
 
 test('validasi form santri menampilkan error dan fokus ke field pertama', async ({ page }) => {

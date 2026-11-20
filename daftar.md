@@ -6,7 +6,7 @@ Daftar ini disusun berdasarkan hasil review aplikasi Sistem Informasi Pondok Al 
 
 | # | Item | Status | Catatan |
 |---|---|---|---|
-| 1 | Autentikasi backend | ✅ | API Express + MySQL, bcrypt, session httpOnly, CSRF, role di middleware (`server/`). |
+| 1 | Autentikasi backend | ✅ | API Express + MariaDB, bcrypt, session httpOnly, CSRF, role di middleware (`server/`). **Frontend default `VITE_API_MODE=api`.** |
 | 2 | Fallback data rusak | ✅ | `getProfil`, `getIuranTambahan`, `getArsipTarif` kini melempar `DataRusakError`. |
 | 3 | Validasi backup ketat | ✅ | Validator nested matriks/transaksi/profil/tarif/print-log + uji format rusak. |
 | 4 | Validasi tanggal kalender | ✅ | Validator kalender di `core.ts` dipakai semua service frontend; server punya `server/src/validation.ts`. |
@@ -16,7 +16,7 @@ Daftar ini disusun berdasarkan hasil review aplikasi Sistem Informasi Pondok Al 
 | 8 | Warning Vite `__dirname` | ✅ | Alias `@/` tidak dipakai sehingga dihapus dari `vite.config.ts`. |
 | 9 | Perbarui `bun.lock` | ✅ | Sudah berisi `react-is@19.3.1`. |
 
-Verifikasi terkini: `npm run lint` ✅ · `npm run lint:server` ✅ · `npm test` 48/48 ✅ · server test 8/8 ✅ · `npm run test:e2e` 3/3 ✅ · **`npm run test:smoke` 4/4 ✅ (MariaDB)** · `npm run build` ✅ · `npm audit` 0 vulnerability.
+Verifikasi terkini: `npm run lint` ✅ · `npm run lint:server` ✅ · `npm test` 48/48 ✅ · server test 8/8 ✅ · `npm run test:e2e` 3/3 ✅ · **`npm run test:smoke` 4/4 ✅ (MariaDB)** · **UI mode API ✅** · `npm run build` ✅ · `npm audit` 0 vulnerability.
 
 ## Prioritas Tinggi
 

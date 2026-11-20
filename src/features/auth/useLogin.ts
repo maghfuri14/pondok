@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { mockAuth } from '../../lib/mockAuth';
 import { apiLogin, isApiMode } from '../../lib/apiClient';
+import { syncFromApi } from '../../lib/apiCache';
 import { authStore } from '../../store/authStore';
 
 export function useLogin() {
@@ -36,6 +37,7 @@ export function useLogin() {
 
       if (isApiMode()) {
         const result = await apiLogin(username.trim(), password);
+        await syncFromApi().catch(() => undefined);
         authStore.setUser({
           username: result.user.username,
           role: result.user.role,

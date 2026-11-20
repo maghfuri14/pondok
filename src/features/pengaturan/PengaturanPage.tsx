@@ -70,6 +70,9 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { authStore, AuthUser } from '../../store/authStore';
 import { formatRupiah } from '../../lib/formatter';
 import { buildBackup, restoreBackup } from '../../lib/backupService';
+import { iuranPembayaranService } from '../../lib/iuranPembayaranService';
+import { isApiMode } from '../../lib/apiClient';
+import { unduhBackupApi, pulihkanBackupApi } from '../../lib/apiBackup';
 import {
   getKategoriKas,
   saveKategoriKas,
@@ -602,7 +605,7 @@ export const PengaturanPage: React.FC = () => {
     }
 
     setIuranList(updated);
-    localStorage.setItem(STORAGE_KEY_IURAN, JSON.stringify(updated));
+    void iuranPembayaranService.saveIuranTambahan(updated);
     setIsIuranModalOpen(false);
   };
 
@@ -615,7 +618,7 @@ export const PengaturanPage: React.FC = () => {
       onConfirm: () => {
         const updated = iuranList.filter((i) => i.id !== id);
         setIuranList(updated);
-        localStorage.setItem(STORAGE_KEY_IURAN, JSON.stringify(updated));
+        void iuranPembayaranService.saveIuranTambahan(updated);
         showToast('Iuran tambahan berhasil dihapus');
         setConfirmState(null);
       },
@@ -812,9 +815,9 @@ export const PengaturanPage: React.FC = () => {
   // Desain Kwitansi Handlers — dikelola di komponen KwitansiTab
 
   // Backup & Restore Handlers
-  const handleDownloadBackup = () => {
+  const handleDownloadBackup = async () => {
     try {
-      const backup = buildBackup();
+      const backup = isApiMode() ? await unduhBackupApi() : buildBackup();
       const dataStr =
         'data:text/json;charset=utf-8,' +
         encodeURIComponent(JSON.stringify(backup, null, 2));
@@ -871,6 +874,21 @@ export const PengaturanPage: React.FC = () => {
       }
 
       try {
+        if (isApiMode()) {
+          void pulihkanBackupApi(json)
+            .then((jumlah) => {
+              showToast(`Restore berhasil (${jumlah} tabel). Memuat ulang halaman...`);
+              setTimeout(() => window.location.reload(), 1200);
+            })
+            .catch((err) =>
+              showToast(
+                err instanceof Error ? err.message : 'Gagal memulihkan data backup',
+                'error'
+              )
+            );
+          return;
+        }
+
         const result = restoreBackup(json);
         showToast(
           `Restore berhasil (${result.restored} kelompok data). Memuat ulang halaman...`

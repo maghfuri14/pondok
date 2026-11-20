@@ -228,6 +228,12 @@ export const iuranPembayaranService = {
       (item) => item.tipe === tipe || item.tipe === 'Keduanya' || !item.tipe
     );
   },
+
+  /** Simpan seluruh daftar iuran tambahan (dipakai menu Pengaturan). */
+  async saveIuranTambahan(list: IuranTambahanItem[]): Promise<IuranTambahanItem[]> {
+    localStorage.setItem(IURAN_TAMBAHAN_KEY, JSON.stringify(list));
+    return list;
+  },
 };
 
 export async function getMasterIuranAktif(): Promise<MasterIuran[]> {

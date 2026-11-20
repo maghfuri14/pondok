@@ -10,6 +10,52 @@ import { requireDate, requireOneOf, requireText, isValidCalendarDate } from '../
 
 export const masterRoutes = Router();
 
+// Rute spesifik harus sebelum CRUD generik (/arsip-tarif/:id, /iuran-tambahan/:id).
+masterRoutes.put(
+  '/arsip-tarif/replace',
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  asyncHandler(async (req, res) => {
+    const list = req.body?.list;
+    if (!Array.isArray(list)) throw badRequest('Daftar arsip tarif tidak valid');
+    const { withTransaction } = await import('../db');
+    await withTransaction(async (conn) => {
+      await conn.execute('DELETE FROM arsip_tarif');
+      for (const row of list as Record<string, unknown>[]) {
+        const keys = Object.keys(row).filter((key) => key !== 'id');
+        if (!keys.length) continue;
+        await conn.execute(
+          `INSERT INTO arsip_tarif (${['id', ...keys].map((k) => `\`${k}\``).join(', ')})
+           VALUES (${['id', ...keys].map(() => '?').join(', ')})`,
+          [row.id || newId('ars'), ...keys.map((key) => row[key])] as any[]
+        );
+      }
+    });
+    res.json({ data: { jumlah: list.length } });
+  })
+);
+
+masterRoutes.put(
+  '/iuran-tambahan/replace',
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  asyncHandler(async (req, res) => {
+    const list = req.body?.list;
+    if (!Array.isArray(list)) throw badRequest('Daftar iuran tambahan tidak valid');
+    const { withTransaction } = await import('../db');
+    await withTransaction(async (conn) => {
+      await conn.execute('DELETE FROM iuran_tambahan');
+      for (const row of list as Record<string, unknown>[]) {
+        await conn.execute(
+          'INSERT INTO iuran_tambahan (id, nama, tipe, nominal) VALUES (?, ?, ?, ?)',
+          [row.id || newId('iur'), String(row.nama), String(row.tipe), Number(row.nominal)] as any[]
+        );
+      }
+    });
+    res.json({ data: { jumlah: list.length } });
+  })
+);
+
 /* ── Master iuran & iuran tambahan (CRUD generik) ── */
 masterRoutes.use(
   '/master-iuran',

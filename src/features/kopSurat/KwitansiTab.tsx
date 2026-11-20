@@ -16,6 +16,7 @@ import { kopSuratService } from '../../lib/kopSuratService';
 import { pengaturanService } from '../../lib/pengaturanService';
 import { ProfilPondok } from '../../types/pengaturan';
 import { showToast } from '../../components/ui/Toast';
+import { simpanKwitansiConfig } from '../../lib/kwitansiConfig';
 
 /* ================= util kecil ala tab lain ================= */
 
@@ -585,7 +586,7 @@ export const KwitansiTab: React.FC = () => {
     showToast('Nama penandatangan diisi dari Profil Pondok.', 'success');
   };
 
-  const simpan = () => {
+  const simpan = async () => {
     if (!(config.kop_surat || '').trim() && !(config.gunakan_kop_desain && kopDesainTersedia)) {
       showToast('Kop kwitansi masih kosong — isi terlebih dahulu.', 'error');
       return;
@@ -598,7 +599,7 @@ export const KwitansiTab: React.FC = () => {
     }
     setIsSaving(true);
     try {
-      localStorage.setItem(STORAGE_KEY_KWITANSI, JSON.stringify(config));
+      await simpanKwitansiConfig(config);
       showToast('Desain Kwitansi berhasil disimpan!', 'success');
     } catch (err) {
       console.error(err);

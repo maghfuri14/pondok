@@ -17,20 +17,24 @@ export const setCsrfToken = (token?: string): void => {
 
 export const getCsrfToken = (): string | undefined => csrfToken;
 
-export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const method = (options.method || 'GET').toUpperCase();
-  const headers = new Headers(options.headers);
+export async function apiRequest<T>(
+  path: string,
+  options: RequestInit & { skipCsrf?: boolean } = {}
+): Promise<T> {
+  const { skipCsrf, ...fetchOptions } = options;
+  const method = (fetchOptions.method || 'GET').toUpperCase();
+  const headers = new Headers(fetchOptions.headers);
 
-  if (options.body && !(options.body instanceof FormData)) {
+  if (fetchOptions.body && !(fetchOptions.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
-  if (!['GET', 'HEAD'].includes(method)) {
+  if (!['GET', 'HEAD'].includes(method) && !skipCsrf) {
     if (!csrfToken) await refreshCsrf();
     if (csrfToken) headers.set('x-csrf-token', csrfToken);
   }
 
   const response = await fetch(`${BASE_URL}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers,
     credentials: 'include',
   });
@@ -56,6 +60,7 @@ export interface ApiLoginResult {
 export async function apiLogin(username: string, password: string): Promise<ApiLoginResult> {
   const response = await apiRequest<{ data: ApiLoginResult }>('/api/auth/login', {
     method: 'POST',
+    skipCsrf: true,
     body: JSON.stringify({ username, password }),
   });
   setCsrfToken(response.data.csrfToken);
@@ -65,6 +70,7 @@ export async function apiLogin(username: string, password: string): Promise<ApiL
 export async function apiSetup(nama: string, username: string, password: string): Promise<void> {
   await apiRequest('/api/auth/setup', {
     method: 'POST',
+    skipCsrf: true,
     body: JSON.stringify({ nama, username, password }),
   });
   await apiLogin(username, password);

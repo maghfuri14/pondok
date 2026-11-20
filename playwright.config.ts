@@ -19,7 +19,7 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run dev -- --mode test',
     url: 'http://localhost:3000',
     reuseExistingServer: true,
     timeout: 120_000,
