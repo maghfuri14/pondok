@@ -1,9 +1,11 @@
 import { readJsonStrict } from './core';
 import { apiRequest, isApiMode } from './apiClient';
 import { syncFromApi } from './apiCache';
-import { syahriyahService } from './syahriyahService';
+import { syahriyahService, getTarifSyahriyah } from './syahriyahService';
 import { santriService } from './santriService';
 import { activityLogService } from './activityLogService';
+
+export type JenisKeringanan = 'kustom' | 'setengah' | 'penuh';
 
 export interface SyahriyahWaiver {
   id: string;
@@ -11,10 +13,11 @@ export interface SyahriyahWaiver {
   tahun: number;
   bulan_mulai: number;
   bulan_selesai: number;
-  /** Potongan rupiah per bulan. */
+  jenis: JenisKeringanan;
+  /** Nominal potongan untuk jenis 'kustom'; diabaikan untuk 50%/penuh. */
   nominal_per_bulan: number;
   keterangan?: string;
-  /** Nominal tagihan asli per bulan, dipakai saat keringanan dicabut. */
+  /** Nominal tagihan sebelum keringanan (untuk data lama / restore). */
   snapshot: Record<string, number>;
   created_at: string;
 }
@@ -24,16 +27,41 @@ export interface KeringananInput {
   tahun: number;
   bulan_mulai: number;
   bulan_selesai: number;
-  nominal_per_bulan: number;
+  jenis: JenisKeringanan;
+  nominal_per_bulan?: number;
   keterangan?: string;
 }
 
 const STORAGE_KEY = 'al_hidayah_syahriyah_waivers';
 
-const bacaLokal = (): SyahriyahWaiver[] => readJsonStrict<SyahriyahWaiver[]>(STORAGE_KEY, []);
+const bacaLokal = (): SyahriyahWaiver[] =>
+  readJsonStrict<SyahriyahWaiver[]>(STORAGE_KEY, []).map((w) => ({
+    ...w,
+    jenis: w.jenis || 'kustom',
+    nominal_per_bulan: w.nominal_per_bulan || 0,
+  }));
+
 const tulisLokal = (list: SyahriyahWaiver[]): void => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 };
+
+/** Potongan rupiah berdasarkan jenis keringanan & tarif yang berlaku. */
+export function hitungPotongan(
+  jenis: JenisKeringanan,
+  nominalKustom: number,
+  tarif: number
+): number {
+  if (jenis === 'penuh') return tarif;
+  if (jenis === 'setengah') return Math.round(tarif / 2);
+  return Math.max(0, Math.min(nominalKustom || 0, tarif));
+}
+
+/** Label singkat untuk badge/tampilan. */
+export function labelKeringanan(w: Pick<SyahriyahWaiver, 'jenis' | 'nominal_per_bulan'>): string {
+  if (w.jenis === 'penuh') return 'Keringanan Penuh';
+  if (w.jenis === 'setengah') return 'Keringanan 50%';
+  return `Keringanan Rp ${(w.nominal_per_bulan || 0).toLocaleString('id-ID')}`;
+}
 
 const tumpangTindih = (
   waivers: SyahriyahWaiver[],
@@ -52,8 +80,7 @@ const tumpangTindih = (
 
 /**
  * Keringanan tagihan syahriyah khusus Super Admin.
- * Mode API: tersimpan di tabel `keringanan_syahriyah` & langsung mengubah matriks di server.
- * Mode lokal: tersimpan di localStorage & mengubah matriks lokal dengan snapshot untuk restore.
+ * Tarif yang berlaku menjadi dasar, lalu dikurangi potongan keringanan.
  */
 export const waiverService = {
   async getAll(santriId?: string, tahun?: number): Promise<SyahriyahWaiver[]> {
@@ -64,7 +91,7 @@ export const waiverService = {
       const response = await apiRequest<{ data: SyahriyahWaiver[] }>(
         `/api/keringanan?${params.toString()}`
       );
-      return response.data;
+      return response.data.map((w) => ({ ...w, jenis: w.jenis || 'kustom' }));
     }
     return bacaLokal().filter(
       (w) => (!santriId || w.santri_id === santriId) && (!tahun || w.tahun === tahun)
@@ -76,18 +103,22 @@ export const waiverService = {
       !Number.isInteger(input.tahun) || input.tahun < 2000 ||
       !Number.isInteger(input.bulan_mulai) || !Number.isInteger(input.bulan_selesai) ||
       input.bulan_mulai < 1 || input.bulan_selesai > 12 || input.bulan_mulai > input.bulan_selesai ||
-      !Number.isInteger(input.nominal_per_bulan) || input.nominal_per_bulan <= 0
+      !['kustom', 'setengah', 'penuh'].includes(input.jenis)
     ) {
       throw new Error('Data keringanan tidak valid');
+    }
+    const nominalKustom = Number(input.nominal_per_bulan) || 0;
+    if (input.jenis === 'kustom' && (!Number.isInteger(nominalKustom) || nominalKustom <= 0)) {
+      throw new Error('Nominal keringanan kustom harus lebih dari 0');
     }
 
     if (isApiMode()) {
       await apiRequest('/api/keringanan/syahriyah', {
         method: 'POST',
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, nominal_per_bulan: nominalKustom }),
       });
       await syncFromApi();
-      return { ...input, id: '', snapshot: {}, created_at: '' };
+      return { ...input, nominal_per_bulan: nominalKustom, id: '', snapshot: {}, created_at: '' };
     }
 
     const list = bacaLokal();
@@ -95,35 +126,47 @@ export const waiverService = {
       throw new Error('Rentang bulan tersebut sudah memiliki keringanan');
     }
 
-    const matrix = await syahriyahService.getSyahriyahMatrix(input.tahun);
-    const records = matrix.find((row) => row.santri.id === input.santri_id)?.records || [];
+    const santri = await santriService.getSantriById(input.santri_id).catch(() => null);
+    if (!santri) throw new Error('Data santri tidak ditemukan');
+    const kategori = santri.kategori;
+
     const snapshot: Record<string, number> = {};
+    const tarifList: number[] = [];
+    for (let bulan = input.bulan_mulai; bulan <= input.bulan_selesai; bulan += 1) {
+      tarifList.push(await getTarifSyahriyah(kategori, input.tahun, bulan));
+    }
+    const tarifTerkecil = Math.min(...tarifList);
+    if (input.jenis === 'kustom' && nominalKustom > tarifTerkecil) {
+      throw new Error(
+        `Nominal keringanan (Rp ${nominalKustom.toLocaleString('id-ID')}) tidak boleh melebihi tarif yang berlaku (Rp ${tarifTerkecil.toLocaleString('id-ID')})`
+      );
+    }
 
     for (let bulan = input.bulan_mulai; bulan <= input.bulan_selesai; bulan += 1) {
-      const record = records.find((r) => r.bulan === bulan);
-      if (!record) throw new Error(`Tagihan bulan ${bulan}/${input.tahun} tidak ditemukan`);
-      snapshot[String(bulan)] = record.nominal_tagihan;
+      const tarif = await getTarifSyahriyah(kategori, input.tahun, bulan);
+      const potongan = hitungPotongan(input.jenis, nominalKustom, tarif);
+      snapshot[String(bulan)] = tarif;
       await syahriyahService.setNominalTagihan(
         input.santri_id,
         input.tahun,
         bulan,
-        Math.max(0, record.nominal_tagihan - input.nominal_per_bulan)
+        Math.max(0, tarif - potongan)
       );
     }
 
     const waiver: SyahriyahWaiver = {
       ...input,
+      nominal_per_bulan: nominalKustom,
       id: `w_${Date.now()}`,
       snapshot,
       created_at: new Date().toISOString(),
     };
     tulisLokal([waiver, ...list]);
 
-    const santri = await santriService.getSantriById(input.santri_id).catch(() => null);
     activityLogService.catat({
       modul: 'Syahriyah',
       aksi: 'Ubah',
-      deskripsi: `Keringanan ${santri?.nama || input.santri_id} bulan ${input.bulan_mulai}–${input.bulan_selesai}/${input.tahun} Rp${input.nominal_per_bulan.toLocaleString('id-ID')}/bulan`,
+      deskripsi: `${labelKeringanan(waiver)} ${santri.nama} bulan ${input.bulan_mulai}–${input.bulan_selesai}/${input.tahun}`,
       ref_id: input.santri_id,
     });
     return waiver;
@@ -139,22 +182,24 @@ export const waiverService = {
     const list = bacaLokal();
     const waiver = list.find((w) => w.id === id);
     if (!waiver) throw new Error('Data keringanan tidak ditemukan');
-    for (const [bulan, nominal] of Object.entries(waiver.snapshot)) {
+    const santri = await santriService.getSantriById(waiver.santri_id).catch(() => null);
+    const kategori = santri?.kategori || 'Mukim';
+    for (const [bulan, tarifLama] of Object.entries(waiver.snapshot)) {
+      const tarif = await getTarifSyahriyah(kategori, waiver.tahun, Number(bulan));
       await syahriyahService.setNominalTagihan(
         waiver.santri_id,
         waiver.tahun,
         Number(bulan),
-        Number(nominal),
+        Number(tarifLama) || tarif,
         false
       );
     }
     tulisLokal(list.filter((w) => w.id !== id));
 
-    const santri = await santriService.getSantriById(waiver.santri_id).catch(() => null);
     activityLogService.catat({
       modul: 'Syahriyah',
       aksi: 'Hapus',
-      deskripsi: `Mencabut keringanan syahriyah ${santri?.nama || waiver.santri_id} (${waiver.tahun})`,
+      deskripsi: `Mencabut ${labelKeringanan(waiver)} ${santri?.nama || waiver.santri_id} (${waiver.tahun})`,
       ref_id: waiver.santri_id,
     });
   },

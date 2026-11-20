@@ -133,16 +133,23 @@ export function getSyahriyahMonthsWithPayments(): string[] {
  * Perbarui nominal tagihan yang BELUM dibayar untuk bulan >= periodeMulai.
  * Tagihan yang sudah ada pembayaran tidak pernah diubah.
  */
-export async function applyNewTarifToUnpaidMonths(
+/**
+ * Hitung ulang tagihan bulan `>= periodeMulai` memakai tarif baru, lalu kurangi
+ * keringanan yang aktif. Bulan yang sudah dibayar juga ikut disesuaikan;
+ * kelebihan bayar dicatat sebagai info, riwayat pembayaran tidak diubah.
+ */
+export async function applyNewTarifToMonths(
   periodeMulai: string,
-  getNominal: (kategori: string, tahun: number, bulan: number) => Promise<number>
-): Promise<number> {
+  getNominal: (kategori: string, tahun: number, bulan: number) => Promise<number>,
+  getPotongan: (santriId: string, tahun: number, bulan: number, kategori: string) => Promise<number>
+): Promise<{ diubah: number; kelebihanBayar: number }> {
   const stored = readJsonStrict<MatrixStore>(STORAGE_KEY, {});
   const santriList = await santriService.getSantriList();
   const kategoriById: Record<string, string> = {};
   santriList.forEach((s) => (kategoriById[s.id] = s.kategori));
 
-  let updatedCount = 0;
+  let diubah = 0;
+  let kelebihanBayar = 0;
   for (const santriId of Object.keys(stored)) {
     const kategori = kategoriById[santriId];
     if (!kategori || kategori === 'Kilatan') continue;
@@ -152,21 +159,31 @@ export async function applyNewTarifToUnpaidMonths(
       const newRecords: SyahriyahBulan[] = [];
       for (const r of yearRecords) {
         const ym = `${r.tahun}-${String(r.bulan).padStart(2, '0')}`;
-        if (ym >= periodeMulai && r.total_dibayar === 0) {
-          const newNominal = await getNominal(kategori, r.tahun, r.bulan);
-          if (newNominal !== r.nominal_tagihan) {
-            updatedCount++;
-            newRecords.push({ ...r, nominal_tagihan: newNominal, status: 'Belum' as StatusSyahriyah });
-            continue;
-          }
+        if (ym < periodeMulai) {
+          newRecords.push(r);
+          continue;
         }
-        newRecords.push(r);
+        const tarif = await getNominal(kategori, r.tahun, r.bulan);
+        const potongan = await getPotongan(santriId, r.tahun, r.bulan, kategori);
+        const tagihanBaru = Math.max(0, tarif - potongan);
+        const dibayar = Math.max(0, r.total_dibayar || 0);
+        if (dibayar > tagihanBaru) kelebihanBayar += 1;
+        if (tarif !== r.nominal_tagihan || potongan > 0 || r.total_dibayar !== dibayar) {
+          diubah += 1;
+        }
+        newRecords.push({
+          ...r,
+          nominal_tagihan: tagihanBaru,
+          total_dibayar: dibayar,
+          keringanan: potongan > 0,
+          status: tagihanBaru === 0 || dibayar >= tagihanBaru ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum',
+        });
       }
       stored[santriId][tahun] = newRecords;
     }
   }
   saveMatrixData(stored);
-  return updatedCount;
+  return { diubah, kelebihanBayar };
 }
 
 export const syahriyahService = {

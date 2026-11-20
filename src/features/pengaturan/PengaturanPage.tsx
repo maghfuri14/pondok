@@ -56,7 +56,7 @@ import {
   DEFAULT_TARIF,
   DEFAULT_ARSIP_TARIF,
 } from '../../lib/pengaturanService';
-import { getSyahriyahMonthsWithPayments, applyNewTarifToUnpaidMonths, getTarifSyahriyah } from '../../lib/syahriyahService';
+import { getSyahriyahMonthsWithPayments, applyNewTarifToMonths, getTarifSyahriyah } from '../../lib/syahriyahService';
 import { getKilatanMonthsWithPayments, applyNewKilatanTarifToUnpaid, getTarifKilatanForEvent } from '../../lib/kilatanService';
 import { santriService } from '../../lib/santriService';
 import { Santri } from '../../types/santri';
@@ -71,6 +71,7 @@ import { authStore, AuthUser } from '../../store/authStore';
 import { formatRupiah } from '../../lib/formatter';
 import { buildBackup, restoreBackup } from '../../lib/backupService';
 import { iuranPembayaranService } from '../../lib/iuranPembayaranService';
+import { waiverService, hitungPotongan } from '../../lib/waiverService';
 import { isApiMode } from '../../lib/apiClient';
 import { unduhBackupApi, pulihkanBackupApi } from '../../lib/apiBackup';
 import {
@@ -425,7 +426,7 @@ export const PengaturanPage: React.FC = () => {
     setIsTarifModalOpen(true);
   };
 
-  const handleSaveTarifModal = (e: React.FormEvent) => {
+  const handleSaveTarifModal = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const nowYM = currentYmLocal();
@@ -534,18 +535,34 @@ export const PengaturanPage: React.FC = () => {
     setTarif(updatedTarif);
     pengaturanService.saveTarif(updatedTarif);
 
-    applyNewTarifToUnpaidMonths(newPeriod, (kategori, tahun, bulan) =>
-      getTarifSyahriyah(kategori, tahun, bulan)
+    const waivers = await waiverService.getAll();
+    const penyesuaian = await applyNewTarifToMonths(
+      newPeriod,
+      getTarifSyahriyah,
+      async (santriId, tahun, bulan, kategori) => {
+        const w = waivers.find(
+          (item) =>
+            item.santri_id === santriId &&
+            item.tahun === tahun &&
+            item.bulan_mulai <= bulan &&
+            item.bulan_selesai >= bulan
+        );
+        if (!w) return 0;
+        const tarif = await getTarifSyahriyah(kategori, tahun, bulan);
+        return hitungPotongan(w.jenis, w.nominal_per_bulan, tarif);
+      }
     );
-    applyNewKilatanTarifToUnpaid(newPeriod, (tahun, event) =>
+    await applyNewKilatanTarifToUnpaid(newPeriod, (tahun, event) =>
       getTarifKilatanForEvent(tahun, event)
     );
 
     setIsTarifModalOpen(false);
     showToast(
       isSameStart
-        ? 'Nominal tarif aktif berhasil diperbarui!'
-        : 'Tarif baru aktif. Tarif lama dipindah ke arsip.',
+        ? `Tarif aktif diperbarui (${penyesuaian.diubah} bulan disesuaikan).`
+        : `Tarif baru aktif. ${penyesuaian.diubah} bulan disesuaikan.${
+            penyesuaian.kelebihanBayar ? ` ${penyesuaian.kelebihanBayar} bulan kelebihan bayar.` : ''
+          }`,
       'success'
     );
   };

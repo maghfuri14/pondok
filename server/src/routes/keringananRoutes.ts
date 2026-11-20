@@ -6,7 +6,37 @@ import { execute, query, withTransaction, type Rows } from '../db';
 import { asyncHandler, badRequest, conflict, notFound } from '../errors';
 import { newId } from '../id';
 import { ADMIN_ROLES } from '../roles';
-import { requirePositiveInteger, requireText } from '../validation';
+import { requireOneOf, requireText } from '../validation';
+async function tarifSyahriyah(kategori: string, tahun: number, bulan: number): Promise<number> {
+  const ym = `${tahun}-${String(bulan).padStart(2, '0')}`;
+  const settings = await query<Rows>("SELECT nilai FROM pengaturan WHERE kunci = 'tarif'");
+  const nilai = settings[0]
+    ? typeof settings[0].nilai === 'string'
+      ? JSON.parse(settings[0].nilai)
+      : settings[0].nilai
+    : {};
+  let berlaku = nilai as Record<string, any>;
+  if (ym < String(berlaku.periode_mulai || `${tahun}-01`)) {
+    const arsip = await query<Rows>(
+      "SELECT * FROM arsip_tarif WHERE status = 'Diarsipkan' ORDER BY periode_mulai DESC"
+    );
+    const cocok = arsip.find(
+      (a) => ym >= String(a.periode_mulai) && (!a.periode_selesai || ym <= String(a.periode_selesai))
+    );
+    if (cocok) berlaku = cocok as Record<string, any>;
+  }
+  return Number(kategori === 'Nduduk' ? berlaku.syahriyah_nduduk : berlaku.syahriyah_mukim) || 0;
+}
+
+function potonganKeringanan(
+  jenis: string,
+  nominalKustom: number,
+  tarif: number
+): number {
+  if (jenis === 'penuh') return tarif;
+  if (jenis === 'setengah') return Math.round(tarif / 2);
+  return Math.max(0, Math.min(nominalKustom, tarif));
+}
 
 export const keringananRoutes = Router();
 
@@ -50,7 +80,11 @@ keringananRoutes.post(
     const tahun = Number(req.body?.tahun);
     const bulanMulai = Number(req.body?.bulan_mulai);
     const bulanSelesai = Number(req.body?.bulan_selesai);
-    const nominalPerBulan = requirePositiveInteger(req.body?.nominal_per_bulan, 'Nominal keringanan');
+    const jenis = requireOneOf(req.body?.jenis, ['kustom', 'setengah', 'penuh'] as const, 'Jenis keringanan');
+    const nominalPerBulan = Number(req.body?.nominal_per_bulan) || 0;
+    if (jenis === 'kustom' && (!Number.isInteger(nominalPerBulan) || nominalPerBulan <= 0)) {
+      throw badRequest('Nominal keringanan kustom harus lebih dari 0');
+    }
     const keterangan = typeof req.body?.keterangan === 'string' ? req.body.keterangan.trim() : '';
 
     if (!Number.isInteger(tahun) || tahun < 2000) throw badRequest('Tahun tidak valid');
@@ -62,12 +96,23 @@ keringananRoutes.post(
     }
 
     const result = await withTransaction(async (conn) => {
-      const santriList = await rowsOf(conn, 'SELECT id, nama FROM santri WHERE id = ?', [santriId]);
+      const santriList = await rowsOf(conn, 'SELECT id, nama, kategori FROM santri WHERE id = ?', [santriId]);
       const santri = santriList[0];
       if (!santri) throw notFound('Data santri tidak ditemukan');
 
+      const tarifList: number[] = [];
+      for (let bulan = bulanMulai; bulan <= bulanSelesai; bulan += 1) {
+        tarifList.push(await tarifSyahriyah(String(santri.kategori), tahun, bulan));
+      }
+      if (jenis === 'kustom' && nominalPerBulan > Math.min(...tarifList)) {
+        throw badRequest(
+          `Nominal keringanan tidak boleh melebihi tarif yang berlaku (Rp ${Math.min(...tarifList).toLocaleString('id-ID')})`
+        );
+      }
+
       const snapshot: Record<string, number> = {};
       for (let bulan = bulanMulai; bulan <= bulanSelesai; bulan += 1) {
+        const tarif = await tarifSyahriyah(String(santri.kategori), tahun, bulan);
         const matrixList = await rowsOf(
           conn,
           `SELECT id, nominal_tagihan, total_dibayar FROM syahriyah_bulan
@@ -87,9 +132,9 @@ keringananRoutes.post(
           throw conflict(`Bulan ${bulan}/${tahun} sudah memiliki keringanan`);
         }
 
-        const asli = Number(matrix.nominal_tagihan);
+        const asli = tarif;
         const dibayar = Number(matrix.total_dibayar);
-        const tagihanBaru = Math.max(0, asli - nominalPerBulan);
+        const tagihanBaru = Math.max(0, asli - potonganKeringanan(jenis, nominalPerBulan, asli));
         const status =
           tagihanBaru === 0
             ? 'Lunas'
@@ -109,10 +154,10 @@ keringananRoutes.post(
       const id = newId('kr');
       await conn.execute(
         `INSERT INTO keringanan_syahriyah
-         (id, santri_id, tahun, bulan_mulai, bulan_selesai, nominal_per_bulan, keterangan, snapshot, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)`,
+         (id, santri_id, tahun, bulan_mulai, bulan_selesai, jenis, nominal_per_bulan, keterangan, snapshot, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)`,
         [
-          id, santriId, tahun, bulanMulai, bulanSelesai, nominalPerBulan,
+          id, santriId, tahun, bulanMulai, bulanSelesai, jenis, nominalPerBulan,
           keterangan || null,
           JSON.stringify(snapshot),
           req.user?.id ?? null,

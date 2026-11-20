@@ -106,6 +106,7 @@ export async function syncFromApi(): Promise<void> {
       bulan_mulai: Number(row.bulan_mulai),
       bulan_selesai: Number(row.bulan_selesai),
       nominal_per_bulan: Number(row.nominal_per_bulan),
+      jenis: row.jenis || 'kustom',
       ...(row.keterangan ? { keterangan: row.keterangan } : {}),
       snapshot: teksJson(row.snapshot) || {},
       created_at: row.created_at,

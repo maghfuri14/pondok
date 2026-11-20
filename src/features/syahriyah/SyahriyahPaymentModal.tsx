@@ -31,6 +31,7 @@ import { showToast } from '../../components/ui/Toast';
 import { formatRupiah, formatThousand, parseThousand } from '../../lib/formatter';
 import { generateKwitansiPdf, printKwitansiHtml } from '../../lib/pdfHelper';
 import { StrukPembayaranCard, StrukData } from '../../components/ui/StrukPembayaranCard';
+import { waiverService, labelKeringanan, SyahriyahWaiver } from '../../lib/waiverService';
 
 const BULAN_FULL_NAMES = [
   'Januari',
@@ -95,6 +96,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
   // Post-submit success view state
   const [isSuccess, setIsSuccess] = useState(false);
   const [savedRecord, setSavedRecord] = useState<SyahriyahTransaksiRecord | null>(null);
+  const [waivers, setWaivers] = useState<SyahriyahWaiver[]>([]);
 
   // Load all santri for picker
   useEffect(() => {
@@ -105,6 +107,20 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         .catch(() => showToast('Gagal memuat daftar santri', 'error'));
     }
   }, [isOpen]);
+
+  // Keringanan aktif santri untuk keterangan singkat di modal.
+  useEffect(() => {
+    if (!isOpen || !selectedSantri) {
+      setWaivers([]);
+      return;
+    }
+    let active = true;
+    waiverService
+      .getAll(selectedSantri.id, selectedYear)
+      .then((list) => { if (active) setWaivers(list); })
+      .catch(() => { if (active) setWaivers([]); });
+    return () => { active = false; };
+  }, [isOpen, selectedSantri?.id, selectedYear]);
 
   // Muat opsi iuran tambahan dari service (ganti akses localStorage langsung)
   useEffect(() => {
@@ -505,6 +521,12 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
     compute();
   }, [selectedSantri, itemInputs, currentYearRecords]);
 
+  const bulanDipilih = Object.values(itemInputs)[0]?.bulan;
+  const waiverBulanIni = waivers.find(
+    (w) => !bulanDipilih || (w.bulan_mulai <= bulanDipilih && w.bulan_selesai >= bulanDipilih)
+  );
+  const ringkasBulan = (bulan: number) => BULAN_FULL_NAMES[bulan - 1]?.slice(0, 3) || String(bulan);
+
   if (!isOpen) return null;
 
   return (
@@ -635,9 +657,19 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
                       <span className="px-2 py-0.5 rounded font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200">
                         {selectedSantri.kategori}
                       </span>
+                      {waivers[0] && (
+                        <span className="px-2 py-0.5 rounded font-semibold text-amber-800 bg-amber-50 border border-amber-200">
+                          {labelKeringanan(waivers[0])} · {ringkasBulan(waivers[0].bulan_mulai)}–{ringkasBulan(waivers[0].bulan_selesai)}
+                        </span>
+                      )}
                     </div>
                     <p className="text-slate-500">
                       Tarif Iuran: <strong className="text-slate-700">{formatRupiah(tarifBulan)}</strong> / bulan
+                      {waiverBulanIni && (
+                        <span className="text-amber-700">
+                          {' '}· Potongan: <strong>{labelKeringanan(waiverBulanIni)}</strong>
+                        </span>
+                      )}
                       {sisaBulanTerpilih != null && sisaBulanTerpilih !== tarifBulan && (
                         <span className="text-slate-500">
                           {' '}· Sisa: <strong className="text-slate-700">{formatRupiah(sisaBulanTerpilih)}</strong>

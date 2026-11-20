@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS syahriyah_bulan (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE syahriyah_bulan ADD COLUMN IF NOT EXISTS keringanan TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE keringanan_syahriyah ADD COLUMN IF NOT EXISTS jenis ENUM('kustom','setengah','penuh') NOT NULL DEFAULT 'kustom';
 
 -- 4b. keringanan syahriyah (Super Admin)
 CREATE TABLE IF NOT EXISTS keringanan_syahriyah (
@@ -151,7 +152,8 @@ CREATE TABLE IF NOT EXISTS keringanan_syahriyah (
   tahun              SMALLINT UNSIGNED NOT NULL,
   bulan_mulai        TINYINT UNSIGNED NOT NULL,
   bulan_selesai      TINYINT UNSIGNED NOT NULL,
-  nominal_per_bulan  BIGINT NOT NULL DEFAULT 0 COMMENT 'Potongan per bulan',
+  jenis              ENUM('kustom','setengah','penuh') NOT NULL DEFAULT 'kustom',
+  nominal_per_bulan  BIGINT NOT NULL DEFAULT 0 COMMENT 'Potongan untuk jenis kustom',
   keterangan         TEXT NULL,
   snapshot           JSON NULL COMMENT 'nominal_tagihan asli per bulan sebelum keringanan',
   created_at         DATETIME NOT NULL,

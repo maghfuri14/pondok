@@ -325,6 +325,49 @@ masterRoutes.get('/pengaturan', requireAuth, asyncHandler(async (req, res) => {
   res.json({ data: kunci ? rows[0] || null : rows });
 }));
 
+/** Samakan matriks dengan tarif baru: tarif berlaku → dikurangi keringanan. */
+async function sesuaikanTarifDiServer(nilai: Record<string, any>): Promise<void> {
+  const periodeMulai = String(nilai.periode_mulai || new Date().toISOString().slice(0, 7));
+  const { withTransaction } = await import('../db');
+  await withTransaction(async (conn) => {
+    const santriRows = await conn.query('SELECT id, kategori FROM santri');
+    const kategoriById = new Map<string, string>();
+    (santriRows as Rows).forEach((s) => kategoriById.set(String(s.id), String(s.kategori)));
+
+    const waiverRows = await conn.query('SELECT * FROM keringanan_syahriyah');
+    const waivers = waiverRows as Rows;
+    const matrixRows = await conn.query('SELECT id, santri_id, tahun, bulan, total_dibayar FROM syahriyah_bulan');
+
+    for (const row of matrixRows as Rows) {
+      const ym = `${String(row.tahun)}-${String(row.bulan).padStart(2, '0')}`;
+      if (ym < periodeMulai) continue;
+      const kategori = kategoriById.get(String(row.santri_id)) || 'Mukim';
+      if (kategori === 'Kilatan') continue;
+      const tarif = Number(kategori === 'Nduduk' ? nilai.syahriyah_nduduk : nilai.syahriyah_mukim) || 0;
+      const waiver = waivers.find(
+        (w) =>
+          String(w.santri_id) === String(row.santri_id) &&
+          Number(w.tahun) === Number(row.tahun) &&
+          Number(w.bulan_mulai) <= Number(row.bulan) &&
+          Number(w.bulan_selesai) >= Number(row.bulan)
+      );
+      let potongan = 0;
+      if (waiver) {
+        const jenis = String(waiver.jenis || 'kustom');
+        const nominal = Number(waiver.nominal_per_bulan) || 0;
+        potongan = jenis === 'penuh' ? tarif : jenis === 'setengah' ? Math.round(tarif / 2) : Math.min(nominal, tarif);
+      }
+      const tagihan = Math.max(0, tarif - potongan);
+      const dibayar = Number(row.total_dibayar) || 0;
+      const status = tagihan === 0 || dibayar >= tagihan ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
+      await conn.execute(
+        'UPDATE syahriyah_bulan SET nominal_tagihan = ?, status = ?, keringanan = ? WHERE id = ?',
+        [tagihan, status, potongan > 0 ? 1 : 0, row.id]
+      );
+    }
+  });
+}
+
 masterRoutes.put('/pengaturan/:kunci', requireAuth, requireRole(...ADMIN_ROLES), asyncHandler(async (req, res) => {
   const kunci = requireText(req.params.kunci, 'Kunci');
   if (!('nilai' in (req.body || {}))) throw badRequest('Field nilai wajib diisi');
@@ -333,6 +376,7 @@ masterRoutes.put('/pengaturan/:kunci', requireAuth, requireRole(...ADMIN_ROLES),
      ON DUPLICATE KEY UPDATE nilai = VALUES(nilai), updated_at = NOW(), updated_by = VALUES(updated_by)`,
     [kunci, JSON.stringify(req.body.nilai), req.user?.id ?? null]
   );
+  if (kunci === 'tarif') await sesuaikanTarifDiServer(req.body.nilai as Record<string, any>);
   res.json({ data: { kunci } });
 }));
 

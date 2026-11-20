@@ -4,10 +4,12 @@
  */
 export type ApiMode = 'local' | 'api';
 
-export const API_MODE: ApiMode = (import.meta.env.VITE_API_MODE as ApiMode) || 'local';
+const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env || {};
+
+export const API_MODE: ApiMode = (env.VITE_API_MODE as ApiMode) || 'local';
 export const isApiMode = (): boolean => API_MODE === 'api';
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001';
+const BASE_URL = env.VITE_API_URL || 'http://localhost:3001';
 
 let csrfToken: string | undefined;
 

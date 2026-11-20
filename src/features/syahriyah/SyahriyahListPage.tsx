@@ -25,6 +25,7 @@ import { SyahriyahPaymentModal } from './SyahriyahPaymentModal';
 import { StrukPembayaranCard, StrukData, StrukItem } from '../../components/ui/StrukPembayaranCard';
 import { KeringananModal } from './KeringananModal';
 import { authStore, AuthUser } from '../../store/authStore';
+import { waiverService, labelKeringanan, SyahriyahWaiver } from '../../lib/waiverService';
 
 const BULAN_NAMES = [
   'Jan',
@@ -80,13 +81,18 @@ export const SyahriyahListPage: React.FC = () => {
   const [keringananOpen, setKeringananOpen] = useState(false);
 
   const [matrixData, setMatrixData] = useState<MatrixRow[]>([]);
+  const [waivers, setWaivers] = useState<SyahriyahWaiver[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const loadMatrix = async () => {
     setIsLoading(true);
     try {
-      const data = await syahriyahService.getSyahriyahMatrix(tahun);
+      const [data, daftarKeringanan] = await Promise.all([
+        syahriyahService.getSyahriyahMatrix(tahun),
+        waiverService.getAll(undefined, tahun),
+      ]);
       setMatrixData(data);
+      setWaivers(daftarKeringanan);
     } catch {
       showToast('Gagal memuat matriks syahriyah', 'error');
     } finally {
@@ -408,6 +414,9 @@ export const SyahriyahListPage: React.FC = () => {
                         const isBefore = isBeforeEntry(santri.tanggal_masuk, rec.tahun, rec.bulan);
                         const isAfter = isSyahriyahSetelahKeluar(santri, rec.tahun, rec.bulan);
                         const isOff = isBefore || isAfter;
+                        const waiver = waivers.find(
+                          (w) => w.bulan_mulai <= rec.bulan && w.bulan_selesai >= rec.bulan
+                        );
 
                         return (
                           <td
@@ -464,6 +473,15 @@ export const SyahriyahListPage: React.FC = () => {
                                 <span>—</span>
                               </div>
                             )}
+
+                            {waiver && !isOff && (
+                              <span
+                                title={`${labelKeringanan(waiver)} · ${BULAN_NAMES[waiver.bulan_mulai - 1]}–${BULAN_NAMES[waiver.bulan_selesai - 1]}`}
+                                className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300 flex items-center justify-center"
+                              >
+                                K
+                              </span>
+                            )}
                           </td>
                         );
                       })}
@@ -491,6 +509,9 @@ export const SyahriyahListPage: React.FC = () => {
                         const isOff =
                           isBeforeEntry(santri.tanggal_masuk, rec.tahun, rec.bulan) ||
                           isSyahriyahSetelahKeluar(santri, rec.tahun, rec.bulan);
+                        const waiverMobile = waivers.find(
+                          (w) => w.santri_id === santri.id && w.bulan_mulai <= rec.bulan && w.bulan_selesai >= rec.bulan
+                        );
                         return (
                           <button
                             key={rec.bulan}
@@ -513,6 +534,9 @@ export const SyahriyahListPage: React.FC = () => {
                             <span className="text-sm font-bold leading-tight">
                               {isOff ? '—' : rec.status === 'Lunas' ? '✓' : rec.status === 'Sebagian' ? '½' : '•'}
                             </span>
+                            {waiverMobile && !isOff && (
+                              <span className="text-[9px] leading-none text-amber-700 font-bold">K</span>
+                            )}
                           </button>
                         );
                       })}

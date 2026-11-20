@@ -25,6 +25,7 @@ import { santriService } from '../../lib/santriService';
 import { syahriyahService } from '../../lib/syahriyahService';
 import { kilatanService } from '../../lib/kilatanService';
 import { iuranPembayaranService } from '../../lib/iuranPembayaranService';
+import { waiverService, labelKeringanan, SyahriyahWaiver } from '../../lib/waiverService';
 import { activityLogService, ActivityLogEntry } from '../../lib/activityLogService';
 import { buatPayloadToggleStatus } from '../../lib/santriStatus';
 import { formatRupiah } from '../../lib/formatter';
@@ -74,6 +75,7 @@ export const SantriDetailPage: React.FC = () => {
   const [riwayatSyahriyah, setRiwayatSyahriyah] = useState<SyahriyahTransaksiRecord[]>([]);
   const [riwayatKilatan, setRiwayatKilatan] = useState<KilatanTransaksiRecord[]>([]);
   const [riwayatIuran, setRiwayatIuran] = useState<IuranPembayaran[]>([]);
+  const [waivers, setWaivers] = useState<SyahriyahWaiver[]>([]);
   const [aktivitasList, setAktivitasList] = useState<ActivityLogEntry[]>([]);
   const [strukData, setStrukData] = useState<StrukData | null>(null);
   const [strukOpen, setStrukOpen] = useState(false);
@@ -110,9 +112,14 @@ export const SantriDetailPage: React.FC = () => {
     const nama = santri.nama.toLowerCase();
     const nis = santri.nis.toLowerCase();
 
-    Promise.all([syahriyahService.getTransaksiList(), kilatanService.getTransaksiList()])
-      .then(([syahriyah, kilatan]) => {
+    Promise.all([
+      syahriyahService.getTransaksiList(),
+      kilatanService.getTransaksiList(),
+      waiverService.getAll(santri.id),
+    ])
+      .then(([syahriyah, kilatan, daftarKeringanan]) => {
         if (!active) return;
+        setWaivers(daftarKeringanan);
         const urut = (a: { transaksi_data?: { tanggal_bayar?: string } }, b: { transaksi_data?: { tanggal_bayar?: string } }) =>
           (b.transaksi_data?.tanggal_bayar || '').localeCompare(a.transaksi_data?.tanggal_bayar || '');
 
@@ -534,6 +541,11 @@ export const SantriDetailPage: React.FC = () => {
                   {riwayatSyahriyah.length} transaksi · total{' '}
                   {formatRupiah(riwayatSyahriyah.reduce((sum, r) => sum + (r.total_pembayaran || 0), 0))}
                 </p>
+                {waivers.length > 0 && (
+                  <p className="text-[11px] font-semibold text-amber-700 mt-0.5">
+                    {labelKeringanan(waivers[0])} · {waivers[0].bulan_mulai}–{waivers[0].bulan_selesai}/{waivers[0].tahun}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => navigate('/syahriyah')}
