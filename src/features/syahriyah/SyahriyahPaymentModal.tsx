@@ -208,6 +208,15 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
     const kategori = selectedSantri?.kategori || 'Mukim';
     const tahun = rec.tahun ?? selectedYear;
     const tarifDasar = await getTarifSyahriyah(kategori, tahun, bulan);
+
+    // Cek riwayat kwitansi: bila bulan sudah bayar, kunci tagihan saat transaksi.
+    const riwayat = await syahriyahService.getTransaksiList();
+    const sudahDibayar = riwayat.some(
+      (t) =>
+        t.santri_id === selectedSantri?.id &&
+        (t.items || []).some((i) => i.tahun === tahun && i.bulan === bulan)
+    );
+
     return hitungTagihan({
       tarifDasar,
       waivers,
@@ -215,6 +224,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
       tahun,
       bulan,
       sudahDibayar: rec.total_dibayar || 0,
+      tagihanTerkunci: sudahDibayar && rec.nominal_tagihan > 0 ? rec.nominal_tagihan : undefined,
     });
   };
 

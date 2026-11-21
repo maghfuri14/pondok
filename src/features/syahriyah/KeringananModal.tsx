@@ -147,7 +147,7 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
 
   const handleHapus = async (id: string) => {
     try {
-      await waiverService.hapus(id);
+      await waiverService.hapus(id, new Date().getMonth() + 1);
       showToast('Keringanan dicabut, tagihan dikembalikan', 'success');
       await loadWaivers(santriId, tahunInput);
       onSuccess();

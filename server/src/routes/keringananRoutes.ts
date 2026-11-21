@@ -182,7 +182,10 @@ keringananRoutes.post(
   })
 );
 
-/** Cabut keringanan: kembalikan nominal_tagihan dari snapshot. */
+/**
+ * Cabut keringanan mulai bulan berjalan: potong periode, jangan hapus & jangan
+ * mengubah bulan yang sudah lunas/ada kwitansi (histori = harga mati).
+ */
 keringananRoutes.delete(
   '/:id',
   requireRole(...ADMIN_ROLES),
@@ -192,36 +195,50 @@ keringananRoutes.delete(
       const waiver = waiverList[0];
       if (!waiver) throw notFound('Data keringanan tidak ditemukan');
 
-      const snapshot =
-        typeof waiver.snapshot === 'string' ? JSON.parse(waiver.snapshot) : (waiver.snapshot || {});
-      for (const [bulan, nominal] of Object.entries(snapshot as Record<string, number>)) {
-        const matrixList = await rowsOf(
+      const mulai = Number(req.body?.dari_bulan) || new Date().getMonth() + 1;
+      const bulanMulai = Number(waiver.bulan_mulai);
+      const bulanSelesai = Number(waiver.bulan_selesai);
+      const potong = mulai > bulanMulai && mulai <= bulanSelesai;
+
+      if (potong) {
+        // Kunci bulan sebelum `mulai` yang sudah ada pembayaran.
+        const lockRows = await rowsOf(
           conn,
-          'SELECT id, total_dibayar FROM syahriyah_bulan WHERE santri_id = ? AND tahun = ? AND bulan = ?',
-          [waiver.santri_id, waiver.tahun, Number(bulan)]
+          `SELECT id FROM syahriyah_bulan
+           WHERE santri_id = ? AND tahun = ? AND bulan < ? AND total_dibayar > 0`,
+          [waiver.santri_id, waiver.tahun, mulai]
         );
-        const matrix = matrixList[0];
-        if (!matrix) continue;
-        const dibayar = Number(matrix.total_dibayar);
-        const status =
-          Number(nominal) > 0 && dibayar >= Number(nominal) ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
+        for (const row of lockRows) {
+          await conn.execute('UPDATE syahriyah_bulan SET keringanan = 1 WHERE id = ?', [row.id]);
+        }
         await conn.execute(
-          'UPDATE syahriyah_bulan SET nominal_tagihan = ?, status = ?, keringanan = 0 WHERE id = ?',
-          [Number(nominal), status, matrix.id]
+          'UPDATE keringanan_syahriyah SET bulan_selesai = ? WHERE id = ?',
+          [mulai - 1, req.params.id]
+        );
+        await logActivity(
+          {
+            modul: 'Syahriyah',
+            aksi: 'Ubah',
+            deskripsi: `Keringanan ${req.params.id} dipotong sampai bulan ${mulai - 1} (mulai bulan ${mulai} tidak berlaku)`,
+            ref_id: req.params.id,
+            userId: req.user?.id,
+          },
+          conn
+        );
+      } else {
+        // Belum ada histori → aman dihapus total.
+        await conn.execute('DELETE FROM keringanan_syahriyah WHERE id = ?', [req.params.id]);
+        await logActivity(
+          {
+            modul: 'Syahriyah',
+            aksi: 'Hapus',
+            deskripsi: `Mencabut keringanan syahriyah ${req.params.id}`,
+            ref_id: req.params.id,
+            userId: req.user?.id,
+          },
+          conn
         );
       }
-
-      await conn.execute('DELETE FROM keringanan_syahriyah WHERE id = ?', [req.params.id]);
-      await logActivity(
-        {
-          modul: 'Syahriyah',
-          aksi: 'Hapus',
-          deskripsi: `Mencabut keringanan syahriyah ${req.params.id}`,
-          ref_id: req.params.id,
-          userId: req.user?.id,
-        },
-        conn
-      );
     });
     res.status(204).end();
   })

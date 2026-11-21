@@ -211,22 +211,32 @@ export const syahriyahService = {
       if (stored[s.id] && stored[s.id][tahun]) {
         records = await Promise.all(stored[s.id][tahun].map(async (r) => {
           const tarifBerlaku = await getTarifSyahriyah(s.kategori, r.tahun, r.bulan);
+          const historis =
+            (r.total_dibayar || 0) > 0 || r.status === 'Lunas' || r.keringanan === false;
+
+          if (historis && r.nominal_tagihan > 0) {
+            // HISTORI = HARGA MATI: kunci nominal & status, abaikan keringanan terbaru.
+            const nominal = r.nominal_tagihan;
+            const dibayar = Math.min(r.total_dibayar || 0, nominal);
+            const status: StatusSyahriyah =
+              dibayar >= nominal ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
+            return { ...r, nominal_tagihan: nominal, total_dibayar: dibayar, status };
+          }
+
           const hasil = hitungTagihan({
             tarifDasar: tarifBerlaku,
             waivers,
             santriId: s.id,
             tahun: r.tahun,
             bulan: r.bulan,
-            sudahDibayar: r.total_dibayar || 0,
+            sudahDibayar: 0,
           });
-          const nominal = hasil.tagihanBersih;
-          const dibayar = Math.min(hasil.dibayar, nominal);
-
-          let status: StatusSyahriyah = 'Belum';
-          if (nominal === 0 || dibayar >= nominal) status = 'Lunas';
-          else if (dibayar > 0) status = 'Sebagian';
-
-          return { ...r, nominal_tagihan: nominal, total_dibayar: dibayar, status };
+          return {
+            ...r,
+            nominal_tagihan: hasil.tagihanBersih,
+            total_dibayar: 0,
+            status: hasil.tagihanBersih === 0 ? 'Lunas' : 'Belum',
+          };
         }));
       } else {
         records = await createEmptySyahriyahYear(s.kategori, tahun);
@@ -235,7 +245,7 @@ export const syahriyahService = {
       return { santri: s, records };
     }));
 
-    // Simpan nominal yang sudah disinkron hanya jika ada perubahan
+    // Tulis hasil matriks. Nilai histori sudah dikunci di `records`, jadi aman.
     let changed = false;
     for (const row of matrix) {
       if (!stored[row.santri.id]) stored[row.santri.id] = {};

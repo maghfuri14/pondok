@@ -5,6 +5,8 @@ import { syahriyahService, getTarifSyahriyah } from './syahriyahService';
 import { santriService } from './santriService';
 import { activityLogService } from './activityLogService';
 
+const BULAN_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+
 export type JenisKeringanan = 'kustom' | 'setengah' | 'penuh';
 
 export interface SyahriyahWaiver {
@@ -172,9 +174,17 @@ export const waiverService = {
     return waiver;
   },
 
-  async hapus(id: string): Promise<void> {
+  /**
+   * Cabut keringanan mulai bulan berjalan.
+   * HISTORI = HARGA MATI: bulan-bulan yang sudah lunas tetap memakai keringanan lama.
+   * Jika pencabutan mulai setelah bulan_mulai → periode dipotong, record dipertahankan.
+   */
+  async hapus(id: string, dariBulan?: number): Promise<void> {
     if (isApiMode()) {
-      await apiRequest(`/api/keringanan/${id}`, { method: 'DELETE' });
+      await apiRequest(`/api/keringanan/${id}`, {
+        method: 'DELETE',
+        body: dariBulan ? JSON.stringify({ dari_bulan: dariBulan }) : undefined,
+      });
       await syncFromApi();
       return;
     }
@@ -183,23 +193,48 @@ export const waiverService = {
     const waiver = list.find((w) => w.id === id);
     if (!waiver) throw new Error('Data keringanan tidak ditemukan');
     const santri = await santriService.getSantriById(waiver.santri_id).catch(() => null);
-    const kategori = santri?.kategori || 'Mukim';
-    for (const [bulan, tarifLama] of Object.entries(waiver.snapshot)) {
-      const tarif = await getTarifSyahriyah(kategori, waiver.tahun, Number(bulan));
-      await syahriyahService.setNominalTagihan(
-        waiver.santri_id,
-        waiver.tahun,
-        Number(bulan),
-        Number(tarifLama) || tarif,
-        false
-      );
-    }
-    tulisLokal(list.filter((w) => w.id !== id));
+    const nama = santri?.nama || waiver.santri_id;
 
+    const mulai = dariBulan ?? new Date().getMonth() + 1;
+    const potong = mulai > waiver.bulan_mulai && mulai <= waiver.bulan_selesai;
+
+    if (potong) {
+      // Kunci bulan sebelum `mulai`: sudah terikat keringanan saat transaksi terjadi.
+      const matrix = readJsonStrict<Record<string, Record<string, Array<Record<string, unknown>>>>>(
+        'al_hidayah_syahriyah', {}
+      );
+      const rows = matrix[waiver.santri_id]?.[String(waiver.tahun)] || [];
+      for (const row of rows) {
+        const bulan = Number(row.bulan);
+        if (bulan < mulai && (Number(row.total_dibayar) || 0) > 0) {
+          row.keringanan = true;
+        }
+      }
+      localStorage.setItem('al_hidayah_syahriyah', JSON.stringify(matrix));
+
+      const dipotong: SyahriyahWaiver = {
+        ...waiver,
+        bulan_selesai: mulai - 1,
+      };
+      tulisLokal(list.map((w) => (w.id === id ? dipotong : w)));
+
+      activityLogService.catat({
+        modul: 'Syahriyah',
+        aksi: 'Ubah',
+        deskripsi: `${labelKeringanan(waiver)} ${nama} dipotong sampai ${
+          BULAN_NAMES[mulai - 2]
+        } (mulai ${BULAN_NAMES[mulai - 1]} tidak berlaku)`,
+        ref_id: waiver.santri_id,
+      });
+      return;
+    }
+
+    // Belum ada histori yang terkena → aman dihapus total.
+    tulisLokal(list.filter((w) => w.id !== id));
     activityLogService.catat({
       modul: 'Syahriyah',
       aksi: 'Hapus',
-      deskripsi: `Mencabut ${labelKeringanan(waiver)} ${santri?.nama || waiver.santri_id} (${waiver.tahun})`,
+      deskripsi: `Mencabut ${labelKeringanan(waiver)} ${nama} (${waiver.tahun})`,
       ref_id: waiver.santri_id,
     });
   },
