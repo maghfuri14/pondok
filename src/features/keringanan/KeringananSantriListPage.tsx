@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, SearchX, ArrowRight } from 'lucide-react';
+import { Search, SearchX, ArrowRight, Gift } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Santri } from '../../types/santri';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { showToast } from '../../components/ui/Toast';
 import { santriService } from '../../lib/santriService';
 import { waiverService, SyahriyahWaiver } from '../../lib/waiverService';
+import { Button } from '../../components/ui/Button';
+import { authStore, AuthUser } from '../../store/authStore';
+import { KeringananModal } from '../syahriyah/KeringananModal';
 
 const BULAN_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
@@ -28,6 +31,21 @@ export const KeringananSantriListPage: React.FC = () => {
   const [santriById, setSantriById] = useState<Record<string, Santri>>({});
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const isSuperAdmin = user?.role === 'super_admin';
+  const [keringananOpen, setKeringananOpen] = useState(false);
+
+  useEffect(() => {
+    authStore.getUser().then(setUser);
+  }, []);
+
+  const reloadWaivers = async () => {
+    try {
+      setWaivers(await waiverService.getAll());
+    } catch {
+      // daftar sebelumnya tetap tampil
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -69,15 +87,22 @@ export const KeringananSantriListPage: React.FC = () => {
             {waivers.length} santri mendapat keringanan Syahriyah
           </p>
         </div>
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari santri..."
-            className="w-full sm:w-64 pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-[#0F172A]"
-          />
+        <div className="flex items-center gap-2 sm:ml-auto">
+          {isSuperAdmin && (
+            <Button variant="primary" leftIcon={<Gift className="w-4 h-4" />} onClick={() => setKeringananOpen(true)}>
+              Berikan Keringanan
+            </Button>
+          )}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari santri..."
+              className="w-full sm:w-64 pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-[#0F172A]"
+            />
+          </div>
         </div>
       </div>
 
@@ -187,6 +212,15 @@ export const KeringananSantriListPage: React.FC = () => {
           </>
         )}
       </div>
+
+      {isSuperAdmin && (
+        <KeringananModal
+          isOpen={keringananOpen}
+          onClose={() => setKeringananOpen(false)}
+          onSuccess={reloadWaivers}
+          tahun={new Date().getFullYear()}
+        />
+      )}
     </div>
   );
 };
