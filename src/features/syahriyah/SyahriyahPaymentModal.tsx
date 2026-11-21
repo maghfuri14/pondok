@@ -29,9 +29,10 @@ import { santriService } from '../../lib/santriService';
 import { iuranPembayaranService, type IuranTambahanItem } from '../../lib/iuranPembayaranService';
 import { showToast } from '../../components/ui/Toast';
 import { formatRupiah, formatThousand, parseThousand } from '../../lib/formatter';
+import { hitungTagihan, labelKeringanan, type HasilTagihan } from '../../lib/tagihanKeringanan';
+import { waiverService, type SyahriyahWaiver } from '../../lib/waiverService';
 import { generateKwitansiPdf, printKwitansiHtml } from '../../lib/pdfHelper';
 import { StrukPembayaranCard, StrukData } from '../../components/ui/StrukPembayaranCard';
-import { waiverService, labelKeringanan, SyahriyahWaiver } from '../../lib/waiverService';
 
 const BULAN_FULL_NAMES = [
   'Januari',
@@ -75,6 +76,8 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
 
   // Month status records for (selectedSantri, selectedYear)
   const [currentYearRecords, setCurrentYearRecords] = useState<SyahriyahBulan[]>([]);
+  const [waivers, setWaivers] = useState<SyahriyahWaiver[]>([]);
+  const [hasilBulanTerpilih, setHasilBulanTerpilih] = useState<HasilTagihan | null>(null);
 
   // Selected items keyed by `${tahun}-${bulan}`
   const [itemInputs, setItemInputs] = useState<Record<string, SyahriyahItemInput>>({});
@@ -96,7 +99,6 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
   // Post-submit success view state
   const [isSuccess, setIsSuccess] = useState(false);
   const [savedRecord, setSavedRecord] = useState<SyahriyahTransaksiRecord | null>(null);
-  const [waivers, setWaivers] = useState<SyahriyahWaiver[]>([]);
 
   // Load all santri for picker
   useEffect(() => {
@@ -107,20 +109,6 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         .catch(() => showToast('Gagal memuat daftar santri', 'error'));
     }
   }, [isOpen]);
-
-  // Keringanan aktif santri untuk keterangan singkat di modal.
-  useEffect(() => {
-    if (!isOpen || !selectedSantri) {
-      setWaivers([]);
-      return;
-    }
-    let active = true;
-    waiverService
-      .getAll(selectedSantri.id, selectedYear)
-      .then((list) => { if (active) setWaivers(list); })
-      .catch(() => { if (active) setWaivers([]); });
-    return () => { active = false; };
-  }, [isOpen, selectedSantri?.id, selectedYear]);
 
   // Muat opsi iuran tambahan dari service (ganti akses localStorage langsung)
   useEffect(() => {
@@ -154,6 +142,16 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
   // Fetch month records for selectedSantri & selectedYear
   useEffect(() => {
     if (isOpen && selectedSantri) {
+      waiverService
+        .getAll(selectedSantri.id, selectedYear)
+        .then(setWaivers)
+        .catch(() => setWaivers([]));
+    }
+  }, [isOpen, selectedSantri?.id, selectedYear]);
+
+  // Fetch month records for selectedSantri & selectedYear
+  useEffect(() => {
+    if (isOpen && selectedSantri) {
       syahriyahService.getSyahriyahMatrix(selectedYear).then(async (matrix) => {
         const row = matrix.find((m) => m.santri.id === selectedSantri.id);
         if (row) {
@@ -169,13 +167,15 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
             const targetRec = row.records.find((r) => r.bulan === bulanAktif);
             if (targetRec && targetRec.status !== 'Lunas') {
               const kategori = selectedSantri.kategori || 'Mukim';
-              const tarifPeriode = await getTarifSyahriyah(kategori, selectedYear, bulanAktif);
-              const nominal =
-                targetRec.nominal_tagihan > 0
-                  ? targetRec.nominal_tagihan
-                  : tarifPeriode;
-              const sisa = Math.max(0, nominal - (targetRec.total_dibayar || 0));
-              const nominalBayar = sisa > 0 ? sisa : tarifPeriode;
+              const tarifDasar = await getTarifSyahriyah(kategori, selectedYear, bulanAktif);
+              const hasil = hitungTagihan({
+                tarifDasar,
+                waivers,
+                tahun: selectedYear,
+                bulan: bulanAktif,
+                sudahDibayar: targetRec.total_dibayar || 0,
+              });
+              const nominalBayar = hasil.sisa;
               const key = `${selectedYear}-${bulanAktif}`;
               setItemInputs({
                 [key]: {
@@ -192,13 +192,9 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         showToast('Gagal memuat data syahriyah', 'error');
       });
     }
-  }, [isOpen, selectedSantri, selectedYear, bulanAktif, tahunAktif, isSuccess]);
+  }, [isOpen, selectedSantri, selectedYear, bulanAktif, tahunAktif, isSuccess, itemInputs, waivers]);
 
-  /**
-   * Sisa tagihan.
-   * - Belum bayar sama sekali → pakai tarif Pengaturan (periode) agar sinkron
-   * - Sudah ada bayar → pakai nominal_tagihan historis di matrix
-   */
+  /** Sisa tagihan = tarif periode − keringanan − yang sudah dibayar. */
   const getSisaTagihan = async (
     rec: {
       nominal_tagihan: number;
@@ -210,18 +206,14 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
   ) => {
     const kategori = selectedSantri?.kategori || 'Mukim';
     const tahun = rec.tahun ?? selectedYear;
-    const tarifPeriode = await getTarifSyahriyah(kategori, tahun, bulan);
-    const dibayar = Math.max(0, rec.total_dibayar || 0);
-    const nominal = rec.keringanan
-      ? rec.nominal_tagihan || 0
-      : dibayar === 0
-        ? tarifPeriode > 0
-          ? tarifPeriode
-          : rec.nominal_tagihan || 0
-        : rec.nominal_tagihan && rec.nominal_tagihan > 0
-          ? rec.nominal_tagihan
-          : tarifPeriode;
-    return Math.max(0, nominal - dibayar);
+    const tarifDasar = await getTarifSyahriyah(kategori, tahun, bulan);
+    return hitungTagihan({
+      tarifDasar,
+      waivers,
+      tahun,
+      bulan,
+      sudahDibayar: rec.total_dibayar || 0,
+    });
   };
 
   // Toggle month selection in selectedYear
@@ -250,13 +242,8 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         return copy;
       });
     } else {
-      const sisa = await getSisaTagihan(rec, bulan);
-      const fallbackTarif = await getTarifSyahriyah(
-        selectedSantri?.kategori || 'Mukim',
-        selectedYear,
-        bulan
-      );
-      const nominalBayar = sisa > 0 ? sisa : rec?.keringanan ? 0 : fallbackTarif;
+      const sisa = (await getSisaTagihan(rec, bulan)).sisa;
+      const nominalBayar = sisa;
       setItemInputs((prev) => ({
         ...prev,
         [key]: {
@@ -276,21 +263,15 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
 
     const rec = currentYearRecords.find((r) => r.bulan === item.bulan);
     const sisa = rec
-      ? await getSisaTagihan(rec, item.bulan)
+      ? (await getSisaTagihan(rec, item.bulan)).sisa
       : await getTarifSyahriyah(selectedSantri?.kategori || 'Mukim', item.tahun, item.bulan);
-    const base =
-      sisa > 0
-        ? sisa
-        : rec?.keringanan
-          ? 0
-          : await getTarifSyahriyah(selectedSantri?.kategori || 'Mukim', item.tahun, item.bulan);
     setItemInputs((prev) => ({
       ...prev,
       [key]: {
         ...prev[key],
         jenis,
         // Sebagian: tetap nominal penuh (sisa); user yang edit. Tidak auto bagi 2.
-        nominal: base,
+        nominal: Math.max(0, sisa),
       },
     }));
   };
@@ -302,7 +283,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
       const rec = currentYearRecords.find((r) => r.bulan === item.bulan && r.tahun === item.tahun);
       // Jika rekaman ditemukan, gunakan sisa sebagai batas atas
       if (rec) {
-        const sisa = await getSisaTagihan(rec, item.bulan);
+        const sisa = (await getSisaTagihan(rec, item.bulan)).sisa;
         if (sisa > 0 && num > sisa) num = sisa;
       }
     }
@@ -414,7 +395,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         currentYearRecords.find((r) => r.bulan === it.bulan && r.tahun === it.tahun) ||
         currentYearRecords.find((r) => r.bulan === it.bulan);
       const sisa = rec
-        ? await getSisaTagihan(rec, it.bulan)
+        ? (await getSisaTagihan(rec, it.bulan)).sisa
         : await getTarifSyahriyah(selectedSantri.kategori, it.tahun, it.bulan);
       if (it.jenis === 'Penuh') {
         return { ...it, nominal: sisa };
@@ -431,7 +412,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         currentYearRecords.find((r) => r.bulan === it.bulan && r.tahun === it.tahun) ||
         currentYearRecords.find((r) => r.bulan === it.bulan);
       if (rec) {
-        const sisa = await getSisaTagihan(rec, it.bulan);
+        const sisa = (await getSisaTagihan(rec, it.bulan)).sisa;
         if (it.nominal > sisa) {
           showToast(
             `Nominal bulan ${it.bulan}/${it.tahun} melebihi sisa tagihan (${formatRupiah(sisa)}).`,
@@ -500,32 +481,25 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
       if (list.length === 1) {
         const it = list[0];
         const rec = currentYearRecords.find((r) => r.bulan === it.bulan);
-        const live = await getTarifSyahriyah(selectedSantri.kategori, it.tahun, it.bulan);
-        if (rec?.keringanan) {
-          setTarifBulan(rec.nominal_tagihan);
-        } else if (rec && (rec.total_dibayar || 0) > 0 && rec.nominal_tagihan > 0) {
-          setTarifBulan(rec.nominal_tagihan);
-        } else {
-          setTarifBulan(live > 0 ? live : rec?.nominal_tagihan || 0);
-        }
-        if (!rec) {
-          setSisaBulanTerpilih(await getTarifSyahriyah(selectedSantri.kategori, it.tahun, it.bulan));
-        } else {
-          setSisaBulanTerpilih(await getSisaTagihan(rec, it.bulan));
-        }
+        const tarifDasar = await getTarifSyahriyah(selectedSantri.kategori, it.tahun, it.bulan);
+        const hasil = hitungTagihan({
+          tarifDasar,
+          waivers,
+          tahun: it.tahun,
+          bulan: it.bulan,
+          sudahDibayar: rec?.total_dibayar || 0,
+        });
+        setTarifBulan(hasil.tarifDasar);
+        setSisaBulanTerpilih(hasil.sisa);
+        setHasilBulanTerpilih(hasil);
       } else {
         setTarifBulan(await getTarifSyahriyah(selectedSantri.kategori));
         setSisaBulanTerpilih(null);
+        setHasilBulanTerpilih(null);
       }
     };
     compute();
-  }, [selectedSantri, itemInputs, currentYearRecords]);
-
-  const bulanDipilih = Object.values(itemInputs)[0]?.bulan;
-  const waiverBulanIni = waivers.find(
-    (w) => !bulanDipilih || (w.bulan_mulai <= bulanDipilih && w.bulan_selesai >= bulanDipilih)
-  );
-  const ringkasBulan = (bulan: number) => BULAN_FULL_NAMES[bulan - 1]?.slice(0, 3) || String(bulan);
+  }, [selectedSantri, itemInputs, currentYearRecords, waivers]);
 
   if (!isOpen) return null;
 
@@ -657,19 +631,19 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
                       <span className="px-2 py-0.5 rounded font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200">
                         {selectedSantri.kategori}
                       </span>
-                      {waivers[0] && (
-                        <span className="px-2 py-0.5 rounded font-semibold text-amber-800 bg-amber-50 border border-amber-200">
-                          {labelKeringanan(waivers[0])} · {ringkasBulan(waivers[0].bulan_mulai)}–{ringkasBulan(waivers[0].bulan_selesai)}
-                        </span>
-                      )}
                     </div>
+                    {hasilBulanTerpilih?.jenis && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          {labelKeringanan(hasilBulanTerpilih)}
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          potongan {formatRupiah(hasilBulanTerpilih.potongan)}/bulan
+                        </span>
+                      </div>
+                    )}
                     <p className="text-slate-500">
                       Tarif Iuran: <strong className="text-slate-700">{formatRupiah(tarifBulan)}</strong> / bulan
-                      {waiverBulanIni && (
-                        <span className="text-amber-700">
-                          {' '}· Potongan: <strong>{labelKeringanan(waiverBulanIni)}</strong>
-                        </span>
-                      )}
                       {sisaBulanTerpilih != null && sisaBulanTerpilih !== tarifBulan && (
                         <span className="text-slate-500">
                           {' '}· Sisa: <strong className="text-slate-700">{formatRupiah(sisaBulanTerpilih)}</strong>

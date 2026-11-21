@@ -3,10 +3,10 @@ import { Gift, Trash2, X } from 'lucide-react';
 import { Santri } from '../../types/santri';
 import { santriService } from '../../lib/santriService';
 import { showToast } from '../../components/ui/Toast';
+import { getTarifSyahriyah } from '../../lib/syahriyahService';
 import { SantriPicker } from '../../components/ui/SantriPicker';
 import { formatRupiah } from '../../lib/formatter';
-import { SyahriyahWaiver, waiverService, JenisKeringanan, hitungPotongan, labelKeringanan } from '../../lib/waiverService';
-import { getTarifSyahriyah } from '../../lib/syahriyahService';
+import { SyahriyahWaiver, waiverService } from '../../lib/waiverService';
 
 const BULAN_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
@@ -32,8 +32,8 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
   const [bulanMulai, setBulanMulai] = useState(1);
   const [bulanSelesai, setBulanSelesai] = useState(12);
   const [nominalStr, setNominalStr] = useState('');
-  const [jenis, setJenis] = useState<JenisKeringanan>('kustom');
-  const [tarifContoh, setTarifContoh] = useState(0);
+  const [jenis, setJenis] = useState<'kustom' | 'setengah' | 'penuh'>('kustom');
+  const [tarifRentang, setTarifRentang] = useState({ min: 0, max: 0 });
   const [keterangan, setKeterangan] = useState('');
   const [waivers, setWaivers] = useState<SyahriyahWaiver[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,6 +54,8 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setTahunInput(tahun);
+    setNominalStr('');
+    setJenis('kustom');
     setIsLoading(true);
     santriService
       .getSantriList()
@@ -72,23 +74,35 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
 
   useEffect(() => {
     if (!isOpen || !santriId) return;
-    const santri = santriList.find((s) => s.id === santriId);
-    if (!santri) return;
+    const s = santriList.find((item) => item.id === santriId);
+    if (!s) return;
     let active = true;
-    getTarifSyahriyah(santri.kategori, tahunInput, bulanMulai)
-      .then((t) => { if (active) setTarifContoh(t); })
-      .catch(() => { if (active) setTarifContoh(0); });
+    const months: number[] = [];
+    for (let b = bulanMulai; b <= bulanSelesai; b += 1) months.push(b);
+    Promise.all(
+      months.map((b) => getTarifSyahriyah(s.kategori, tahunInput, b))
+    ).then((values) => {
+      if (!active || values.length === 0) return;
+      setTarifRentang({ min: Math.min(...values), max: Math.max(...values) });
+    }).catch(() => {
+      if (active) setTarifRentang({ min: 0, max: 0 });
+    });
     return () => { active = false; };
-  }, [isOpen, santriId, tahunInput, bulanMulai, santriList]);
+  }, [isOpen, santriId, tahunInput, bulanMulai, bulanSelesai, santriList]);
 
   const nominal = Number(nominalStr.replace(/\D/g, ''));
-  const potonganPreview = hitungPotongan(jenis, nominal, tarifContoh);
+  const nominalEfektif =
+    jenis === 'penuh'
+      ? tarifRentang.max
+      : jenis === 'setengah'
+        ? Math.round(tarifRentang.min / 2)
+        : nominal;
   const bentrok = waivers.some(
     (w) => w.bulan_mulai <= bulanSelesai && w.bulan_selesai >= bulanMulai
   );
   const totalKeringanan = useMemo(
-    () => potonganPreview * Math.max(0, bulanSelesai - bulanMulai + 1),
-    [potonganPreview, bulanMulai, bulanSelesai]
+    () => nominalEfektif * Math.max(0, bulanSelesai - bulanMulai + 1),
+    [nominalEfektif, bulanMulai, bulanSelesai]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,8 +111,15 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
       showToast('Pilih santri terlebih dahulu', 'error');
       return;
     }
-    if (jenis === 'kustom' && (!nominal || nominal <= 0)) {
-      showToast('Nominal keringanan kustom harus lebih dari 0', 'error');
+    if (!nominalEfektif || nominalEfektif <= 0) {
+      showToast('Nominal keringanan harus lebih dari 0', 'error');
+      return;
+    }
+    if (jenis === 'kustom' && nominal > tarifRentang.min) {
+      showToast(
+        `Nominal keringanan tidak boleh melebihi tarif berlaku (${formatRupiah(tarifRentang.min)})`,
+        'error'
+      );
       return;
     }
     setIsSaving(true);
@@ -108,8 +129,8 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
         tahun: tahunInput,
         bulan_mulai: bulanMulai,
         bulan_selesai: bulanSelesai,
+        nominal_per_bulan: nominal,
         jenis,
-        nominal_per_bulan: jenis === 'kustom' ? nominal : 0,
         keterangan: keterangan.trim() || undefined,
       });
       showToast('Keringanan berhasil diberikan', 'success');
@@ -218,8 +239,8 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
                   onClick={() => setJenis(value)}
                   className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${
                     jenis === value
-                      ? 'border-[#059669] bg-emerald-50 text-emerald-700'
-                      : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                      ? 'bg-[#059669] text-white border-[#059669]'
+                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
                   {label}
@@ -228,32 +249,30 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
             </div>
           </div>
 
-          {jenis === 'kustom' && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Nominal potongan (Rp)</label>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              {jenis === 'kustom' ? 'Potongan per bulan (Rp)' : 'Potongan otomatis'}
+            </label>
+            {jenis === 'kustom' ? (
               <input
                 type="text"
                 inputMode="numeric"
                 value={nominalStr}
                 onChange={(e) => setNominalStr(e.target.value.replace(/\D/g, ''))}
-                placeholder="Contoh: 50000"
+                placeholder="Contoh: 100000"
                 className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg outline-none focus:border-[#059669]"
               />
-              {jenis === 'kustom' && nominal > tarifContoh && tarifContoh > 0 && (
-                <p className="text-[11px] text-rose-600 mt-1">
-                  Nominal tidak boleh melebihi tarif berlaku ({formatRupiah(tarifContoh)}).
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
-            <p className="text-xs text-slate-600">
-              Potongan contoh: <strong className="text-slate-800">{formatRupiah(potonganPreview)}</strong> / bulan
-              {tarifContoh > 0 && ` · tarif ${formatRupiah(tarifContoh)}`}
-            </p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            ) : (
+              <div className="px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-700">
+                {jenis === 'penuh' ? 'Seluruh tarif' : 'Setengah dari tarif'} ·{' '}
+                <strong>{formatRupiah(nominalEfektif)}</strong>/bulan
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500 mt-1">
               Total keringanan {formatRupiah(totalKeringanan)} untuk {Math.max(0, bulanSelesai - bulanMulai + 1)} bulan.
+              {jenis === 'kustom' && tarifRentang.min > 0 && (
+                <> Batas maksimal {formatRupiah(tarifRentang.min)}/bulan.</>
+              )}
             </p>
           </div>
 
@@ -287,7 +306,7 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
                         {BULAN_NAMES[w.bulan_mulai - 1]} – {BULAN_NAMES[w.bulan_selesai - 1]} {w.tahun}
                       </p>
                       <p className="text-slate-500">
-                        {labelKeringanan(w)} / bulan{w.keterangan ? ` • ${w.keterangan}` : ''}
+                        {formatRupiah(w.nominal_per_bulan)}/bulan{w.keterangan ? ` • ${w.keterangan}` : ''}
                       </p>
                     </div>
                     <button

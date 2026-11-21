@@ -5,6 +5,8 @@ import {
   SyahriyahTransaksiData,
   SyahriyahTransaksiRecord,
 } from '../types/syahriyah';
+import type { SyahriyahWaiver } from './waiverService';
+import { hitungTagihan } from './tagihanKeringanan';
 import { Santri } from '../types/santri';
 import { santriService } from './santriService';
 import { kasService, KAS_STORAGE_KEY } from './kasService';
@@ -25,6 +27,7 @@ import {
 const STORAGE_KEY = 'al_hidayah_syahriyah';
 const TRANSAKSI_KEY = 'al_hidayah_syahriyah_transaksi';
 const SANTRI_KEY = 'al_hidayah_santri';
+const WAIVER_KEY = 'al_hidayah_syahriyah_waivers';
 
 const BULAN_SINGKAT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
 
@@ -200,6 +203,7 @@ export const syahriyahService = {
     await delay(200);
     const santriList = (await santriService.getSantriList()).filter((s) => s.kategori !== 'Kilatan');
     const stored = getStoredMatrixData();
+    const waivers = readJsonStrict<SyahriyahWaiver[]>(WAIVER_KEY, []);
 
     const matrix = await Promise.all(santriList.map(async (s) => {
       let records: SyahriyahBulan[];
@@ -207,25 +211,18 @@ export const syahriyahService = {
       if (stored[s.id] && stored[s.id][tahun]) {
         records = await Promise.all(stored[s.id][tahun].map(async (r) => {
           const tarifBerlaku = await getTarifSyahriyah(s.kategori, r.tahun, r.bulan);
-          let dibayar = Math.max(0, r.total_dibayar || 0);
-
-          let nominal: number;
-          if (dibayar === 0) {
-            // Bulan yang sudah dikeringankan memakai nominal final dari matriks,
-            // jangan ditimpa tarif aktif.
-            nominal = r.keringanan
-              ? r.nominal_tagihan || 0
-              : tarifBerlaku > 0
-                ? tarifBerlaku
-                : r.nominal_tagihan || 0;
-          } else {
-            nominal = r.nominal_tagihan && r.nominal_tagihan > 0 ? r.nominal_tagihan : tarifBerlaku;
-            if (nominal > 0 && dibayar > nominal) dibayar = nominal;
-          }
+          const hasil = hitungTagihan({
+            tarifDasar: tarifBerlaku,
+            waivers,
+            tahun: r.tahun,
+            bulan: r.bulan,
+            sudahDibayar: r.total_dibayar || 0,
+          });
+          const nominal = hasil.tagihanBersih;
+          const dibayar = Math.min(hasil.dibayar, nominal);
 
           let status: StatusSyahriyah = 'Belum';
-          if (nominal === 0) status = 'Lunas';
-          else if (dibayar >= nominal) status = 'Lunas';
+          if (nominal === 0 || dibayar >= nominal) status = 'Lunas';
           else if (dibayar > 0) status = 'Sebagian';
 
           return { ...r, nominal_tagihan: nominal, total_dibayar: dibayar, status };
@@ -310,6 +307,7 @@ export const syahriyahService = {
     }
 
     const storedMatrix = getStoredMatrixData();
+    const waivers = readJsonStrict<SyahriyahWaiver[]>(WAIVER_KEY, []);
     if (!storedMatrix[santriId]) storedMatrix[santriId] = {};
 
     for (const item of itemsInput) {
@@ -333,12 +331,17 @@ export const syahriyahService = {
       if (index === -1) throw new Error(`Data bulan ${item.bulan}/${item.tahun} tidak ditemukan`);
 
       const current = yearRecords[index];
-      let nominalTagihan = current.nominal_tagihan || 0;
-      if (nominalTagihan <= 0 && !current.keringanan) {
-        nominalTagihan = await getTarifSyahriyah(santri.kategori, item.tahun, item.bulan);
-      }
-      const sudahDibayar = Math.max(0, current.total_dibayar || 0);
-      const sisa = Math.max(0, nominalTagihan - sudahDibayar);
+      const tarifBerlaku = await getTarifSyahriyah(santri.kategori, item.tahun, item.bulan);
+      const hasil = hitungTagihan({
+        tarifDasar: tarifBerlaku,
+        waivers,
+        tahun: item.tahun,
+        bulan: item.bulan,
+        sudahDibayar: current.total_dibayar || 0,
+      });
+      const nominalTagihan = hasil.tagihanBersih;
+      const sudahDibayar = hasil.dibayar;
+      const sisa = hasil.sisa;
 
       if (sisa <= 0 || current.status === 'Lunas') {
         throw new Error(`Bulan ${item.bulan}/${item.tahun} sudah lunas. Tidak dapat menambah pembayaran.`);
