@@ -171,6 +171,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
               const hasil = hitungTagihan({
                 tarifDasar,
                 waivers,
+                santriId: selectedSantri.id,
                 tahun: selectedYear,
                 bulan: bulanAktif,
                 sudahDibayar: targetRec.total_dibayar || 0,
@@ -210,6 +211,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
     return hitungTagihan({
       tarifDasar,
       waivers,
+      santriId: selectedSantri?.id,
       tahun,
       bulan,
       sudahDibayar: rec.total_dibayar || 0,
@@ -485,6 +487,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         const hasil = hitungTagihan({
           tarifDasar,
           waivers,
+          santriId: selectedSantri.id,
           tahun: it.tahun,
           bulan: it.bulan,
           sudahDibayar: rec?.total_dibayar || 0,

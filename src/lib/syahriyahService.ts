@@ -214,6 +214,7 @@ export const syahriyahService = {
           const hasil = hitungTagihan({
             tarifDasar: tarifBerlaku,
             waivers,
+            santriId: s.id,
             tahun: r.tahun,
             bulan: r.bulan,
             sudahDibayar: r.total_dibayar || 0,
@@ -335,6 +336,7 @@ export const syahriyahService = {
       const hasil = hitungTagihan({
         tarifDasar: tarifBerlaku,
         waivers,
+        santriId,
         tahun: item.tahun,
         bulan: item.bulan,
         sudahDibayar: current.total_dibayar || 0,

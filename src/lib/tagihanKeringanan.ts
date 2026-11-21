@@ -5,6 +5,7 @@
 export type JenisKeringanan = 'kustom' | 'setengah' | 'penuh';
 
 export interface WaiverRingkas {
+  santri_id?: string;
   tahun: number;
   bulan_mulai: number;
   bulan_selesai: number;
@@ -37,15 +38,17 @@ export interface HasilTagihan {
 export function hitungTagihan(args: {
   tarifDasar: number;
   waivers: WaiverRingkas[];
+  santriId?: string;
   tahun: number;
   bulan: number;
   sudahDibayar: number;
 }): HasilTagihan {
-  const { tarifDasar, waivers, tahun, bulan, sudahDibayar } = args;
+  const { tarifDasar, waivers, santriId, tahun, bulan, sudahDibayar } = args;
   const tarif = Math.max(0, Number(tarifDasar) || 0);
 
   const w = waivers.find(
     (item) =>
+      (!santriId || item.santri_id === santriId) &&
       Number(item.tahun) === tahun &&
       bulan >= Number(item.bulan_mulai) &&
       bulan <= Number(item.bulan_selesai)
