@@ -210,33 +210,26 @@ export const syahriyahService = {
 
       if (stored[s.id] && stored[s.id][tahun]) {
         records = await Promise.all(stored[s.id][tahun].map(async (r) => {
+          // Histori adalah harga mati: sudah ada pembayaran (atau status
+          // Lunas) → jangan kalkulasi ulang, angka dan status kuncian tetap.
+          // (Ini melindungi bulan lunas sebelum keringanan dicabut.)
+          if ((r.total_dibayar || 0) > 0 || r.status === 'Lunas') return r;
+
           const tarifBerlaku = await getTarifSyahriyah(s.kategori, r.tahun, r.bulan);
-          const historis =
-            (r.total_dibayar || 0) > 0 || r.status === 'Lunas' || r.keringanan === false;
-
-          if (historis && r.nominal_tagihan > 0) {
-            // HISTORI = HARGA MATI: kunci nominal & status, abaikan keringanan terbaru.
-            const nominal = r.nominal_tagihan;
-            const dibayar = Math.min(r.total_dibayar || 0, nominal);
-            const status: StatusSyahriyah =
-              dibayar >= nominal ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
-            return { ...r, nominal_tagihan: nominal, total_dibayar: dibayar, status };
-          }
-
           const hasil = hitungTagihan({
             tarifDasar: tarifBerlaku,
             waivers,
             santriId: s.id,
             tahun: r.tahun,
             bulan: r.bulan,
-            sudahDibayar: 0,
+            sudahDibayar: r.total_dibayar || 0,
           });
-          return {
-            ...r,
-            nominal_tagihan: hasil.tagihanBersih,
-            total_dibayar: 0,
-            status: hasil.tagihanBersih === 0 ? 'Lunas' : 'Belum',
-          };
+          const nominal = hasil.tagihanBersih;
+
+          let status: StatusSyahriyah = 'Belum';
+          if (nominal === 0) status = 'Lunas';
+
+          return { ...r, nominal_tagihan: nominal, total_dibayar: 0, status };
         }));
       } else {
         records = await createEmptySyahriyahYear(s.kategori, tahun);
@@ -245,7 +238,7 @@ export const syahriyahService = {
       return { santri: s, records };
     }));
 
-    // Tulis hasil matriks. Nilai histori sudah dikunci di `records`, jadi aman.
+    // Simpan nominal yang sudah disinkron hanya jika ada perubahan
     let changed = false;
     for (const row of matrix) {
       if (!stored[row.santri.id]) stored[row.santri.id] = {};

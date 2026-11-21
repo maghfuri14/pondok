@@ -5,8 +5,6 @@ import { syahriyahService, getTarifSyahriyah } from './syahriyahService';
 import { santriService } from './santriService';
 import { activityLogService } from './activityLogService';
 
-const BULAN_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
-
 export type JenisKeringanan = 'kustom' | 'setengah' | 'penuh';
 
 export interface SyahriyahWaiver {
@@ -175,15 +173,16 @@ export const waiverService = {
   },
 
   /**
-   * Cabut keringanan mulai bulan berjalan.
-   * HISTORI = HARGA MATI: bulan-bulan yang sudah lunas tetap memakai keringanan lama.
-   * Jika pencabutan mulai setelah bulan_mulai → periode dipotong, record dipertahankan.
+   * Cabut keringanan. Histori bulan lunas adalah harga mati:
+   * pencabutan hanya memotong periode (`bulan_selesai = dariBulan - 1`),
+   * kecuali periode sudah berakhir/belum mulai — maka record dihapus
+   * tanpa menyentuh nominal/status bulan sebelumnya.
    */
   async hapus(id: string, dariBulan?: number): Promise<void> {
     if (isApiMode()) {
       await apiRequest(`/api/keringanan/${id}`, {
         method: 'DELETE',
-        body: dariBulan ? JSON.stringify({ dari_bulan: dariBulan }) : undefined,
+        body: JSON.stringify({ dariBulan }),
       });
       await syncFromApi();
       return;
@@ -193,48 +192,28 @@ export const waiverService = {
     const waiver = list.find((w) => w.id === id);
     if (!waiver) throw new Error('Data keringanan tidak ditemukan');
     const santri = await santriService.getSantriById(waiver.santri_id).catch(() => null);
-    const nama = santri?.nama || waiver.santri_id;
+    const mulai = Number(waiver.bulan_mulai);
+    const selesai = Number(waiver.bulan_selesai);
+    const baruSelesai = (dariBulan ?? mulai) - 1;
 
-    const mulai = dariBulan ?? new Date().getMonth() + 1;
-    const potong = mulai > waiver.bulan_mulai && mulai <= waiver.bulan_selesai;
-
-    if (potong) {
-      // Kunci bulan sebelum `mulai`: sudah terikat keringanan saat transaksi terjadi.
-      const matrix = readJsonStrict<Record<string, Record<string, Array<Record<string, unknown>>>>>(
-        'al_hidayah_syahriyah', {}
-      );
-      const rows = matrix[waiver.santri_id]?.[String(waiver.tahun)] || [];
-      for (const row of rows) {
-        const bulan = Number(row.bulan);
-        if (bulan < mulai && (Number(row.total_dibayar) || 0) > 0) {
-          row.keringanan = true;
-        }
-      }
-      localStorage.setItem('al_hidayah_syahriyah', JSON.stringify(matrix));
-
-      const dipotong: SyahriyahWaiver = {
-        ...waiver,
-        bulan_selesai: mulai - 1,
-      };
-      tulisLokal(list.map((w) => (w.id === id ? dipotong : w)));
-
-      activityLogService.catat({
-        modul: 'Syahriyah',
-        aksi: 'Ubah',
-        deskripsi: `${labelKeringanan(waiver)} ${nama} dipotong sampai ${
-          BULAN_NAMES[mulai - 2]
-        } (mulai ${BULAN_NAMES[mulai - 1]} tidak berlaku)`,
-        ref_id: waiver.santri_id,
-      });
-      return;
+    if (baruSelesai < mulai) {
+      // Keringanan belum mencapai bulan ini → batal total.
+      tulisLokal(list.filter((w) => w.id !== id));
+    } else if (baruSelesai < selesai) {
+      // Potong periode: bulan setelah pembatalan kembali ke tarif penuh
+      // (matrix recalc memasukkannya); bulan lunas sebelumnya tetap terikat
+      // keringanan — matrix fix (guard di getSyahriyahMatrix) jaga statusnya.
+      tulisLokal(list.map((w) => (w.id === id ? { ...w, bulan_selesai: baruSelesai } : w)));
+    } else {
+      // Periode sudah berakhir sebelum pembatalan → hapus record tanpa
+      // reset nominalkBulan sebelumnya (harga mati tetap keringanan).
+      tulisLokal(list.filter((w) => w.id !== id));
     }
 
-    // Belum ada histori yang terkena → aman dihapus total.
-    tulisLokal(list.filter((w) => w.id !== id));
     activityLogService.catat({
       modul: 'Syahriyah',
       aksi: 'Hapus',
-      deskripsi: `Mencabut ${labelKeringanan(waiver)} ${nama} (${waiver.tahun})`,
+      deskripsi: `Mencabut ${labelKeringanan(waiver)} ${santri?.nama || waiver.santri_id} (${waiver.tahun})`,
       ref_id: waiver.santri_id,
     });
   },

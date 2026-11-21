@@ -147,8 +147,12 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
 
   const handleHapus = async (id: string) => {
     try {
-      await waiverService.hapus(id, new Date().getMonth() + 1);
-      showToast('Keringanan dicabut, tagihan dikembalikan', 'success');
+      // Histori lunas jadi bermuktahir: Cabut memotong periode (bulan
+      // setelah bulan berjalan kembali tarif penuh); bulan lunas sebelumnya
+      // tidak berubah (harga mati).
+      const dariBulan = new Date().getMonth() + 1;
+      await waiverService.hapus(id, dariBulan);
+      showToast('Keringanan dicabut (histori lunas tidak berubah)', 'success');
       await loadWaivers(santriId, tahunInput);
       onSuccess();
     } catch (err) {

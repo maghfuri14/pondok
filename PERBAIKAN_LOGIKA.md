@@ -120,7 +120,7 @@ Dokumen ini merangkum perubahan logika bisnis terhadap versi awal, dan mana yang
 - Keringanan berupa **potongan rupiah per bulan** untuk rentang bulan tertentu pada tahun berjalan; bukan persentase tetap.
 - Saat diberikan, `syahriyah_bulan.nominal_tagihan` bulan terkait diturunkan, status dihitung ulang, dan nominal asli disimpan di kolom `snapshot` (JSON) pada `keringanan_syahriyah`.
 - Bulan yang sudah memiliki keringanan tidak bisa diberi keringanan lagi (409) sampai keringanan lama dicabut.
-- Mencabut keringanan mengembalikan `nominal_tagihan` dari `snapshot` dan menghapus record; status dihitung ulang.
+- Mencabut keringanan (Super Admin): histori bulan lunas adalah harga mati — pencabutan memotong periode keringanan (`bulan_selesai = bulan pembatalan − 1`), bulan sebelumnya tetap terikat keringanan, bulan setelah pembatalan kembali tarif penuh (server & mode lokal). `getSyahriyahMatrix` tidak recalc bulan yang sudah ada pembayaran/status Lunas.
 - Setiap perubahan tercatat di `activity_log` (aksi `Ubah` / `Hapus`).
 - Smoke test mencakup siklus penuh: tagihan 300rb → 200rb → kembali 300rb.
 

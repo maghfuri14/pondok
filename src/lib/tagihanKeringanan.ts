@@ -42,24 +42,9 @@ export function hitungTagihan(args: {
   tahun: number;
   bulan: number;
   sudahDibayar: number;
-  /** Nominal tagihan yang sudah terkunci dari histori (bila bulan sudah ada pembayaran). */
-  tagihanTerkunci?: number;
 }): HasilTagihan {
-  const { tarifDasar, waivers, santriId, tahun, bulan, sudahDibayar, tagihanTerkunci } = args;
+  const { tarifDasar, waivers, santriId, tahun, bulan, sudahDibayar } = args;
   const tarif = Math.max(0, Number(tarifDasar) || 0);
-  const dibayar = Math.max(0, Number(sudahDibayar) || 0);
-
-  // Histori adalah harga mati: bila sudah ada kwitansi, pakai tagihan saat transaksi.
-  if (tagihanTerkunci != null && tagihanTerkunci > 0) {
-    return {
-      tarifDasar: tarif,
-      jenis: null,
-      potongan: 0,
-      tagihanBersih: tagihanTerkunci,
-      dibayar,
-      sisa: Math.max(0, tagihanTerkunci - dibayar),
-    };
-  }
 
   const w = waivers.find(
     (item) =>
@@ -92,6 +77,7 @@ export function hitungTagihan(args: {
   }
 
   const tagihanBersih = Math.max(0, tarif - potongan);
+  const dibayar = Math.max(0, Number(sudahDibayar) || 0);
   const sisa = Math.max(0, tagihanBersih - dibayar);
 
   return { tarifDasar: tarif, jenis, potongan, tagihanBersih, dibayar, sisa };

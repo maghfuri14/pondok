@@ -182,10 +182,7 @@ keringananRoutes.post(
   })
 );
 
-/**
- * Cabut keringanan mulai bulan berjalan: potong periode, jangan hapus & jangan
- * mengubah bulan yang sudah lunas/ada kwitansi (histori = harga mati).
- */
+/** Cabut keringanan: kembalikan nominal_tagihan dari snapshot. */
 keringananRoutes.delete(
   '/:id',
   requireRole(...ADMIN_ROLES),
@@ -195,50 +192,52 @@ keringananRoutes.delete(
       const waiver = waiverList[0];
       if (!waiver) throw notFound('Data keringanan tidak ditemukan');
 
-      const mulai = Number(req.body?.dari_bulan) || new Date().getMonth() + 1;
-      const bulanMulai = Number(waiver.bulan_mulai);
-      const bulanSelesai = Number(waiver.bulan_selesai);
-      const potong = mulai > bulanMulai && mulai <= bulanSelesai;
+      const mulai = Number(waiver.bulan_mulai);
+      const selesai = Number(waiver.bulan_selesai);
+      const cutInput = Number(req.body?.dariBulan);
+      const baruSelesai = Number.isInteger(cutInput) ? cutInput - 1 : mulai - 1;
 
-      if (potong) {
-        // Kunci bulan sebelum `mulai` yang sudah ada pembayaran.
-        const lockRows = await rowsOf(
-          conn,
-          `SELECT id FROM syahriyah_bulan
-           WHERE santri_id = ? AND tahun = ? AND bulan < ? AND total_dibayar > 0`,
-          [waiver.santri_id, waiver.tahun, mulai]
-        );
-        for (const row of lockRows) {
-          await conn.execute('UPDATE syahriyah_bulan SET keringanan = 1 WHERE id = ?', [row.id]);
-        }
+      if (baruSelesai < mulai || baruSelesai >= selesai) {
+        // Belum mulai / sudah berakhir: hapus record tanpa menyentuh
+        // nominal & status bulan lunas (harga mati tetap keringanan).
+        await conn.execute('DELETE FROM keringanan_syahriyah WHERE id = ?', [waiver.id]);
+      } else {
+        // Potong periode: bulan setelah pembatalan kembali ke tarif penuh;
+        // bulan lunas sebelumnya tetap terikat keringanan (harga mati).
         await conn.execute(
           'UPDATE keringanan_syahriyah SET bulan_selesai = ? WHERE id = ?',
-          [mulai - 1, req.params.id]
+          [baruSelesai, waiver.id]
         );
-        await logActivity(
-          {
-            modul: 'Syahriyah',
-            aksi: 'Ubah',
-            deskripsi: `Keringanan ${req.params.id} dipotong sampai bulan ${mulai - 1} (mulai bulan ${mulai} tidak berlaku)`,
-            ref_id: req.params.id,
-            userId: req.user?.id,
-          },
-          conn
-        );
-      } else {
-        // Belum ada histori → aman dihapus total.
-        await conn.execute('DELETE FROM keringanan_syahriyah WHERE id = ?', [req.params.id]);
-        await logActivity(
-          {
-            modul: 'Syahriyah',
-            aksi: 'Hapus',
-            deskripsi: `Mencabut keringanan syahriyah ${req.params.id}`,
-            ref_id: req.params.id,
-            userId: req.user?.id,
-          },
-          conn
-        );
+        const santriRows = await rowsOf(conn, 'SELECT kategori FROM santri WHERE id = ?', [waiver.santri_id]);
+        const kategori = santriRows[0]?.kategori || 'Mukim';
+        for (let bulan = baruSelesai + 1; bulan <= selesai; bulan += 1) {
+          const matrixList = await rowsOf(
+            conn,
+            'SELECT id, total_dibayar FROM syahriyah_bulan WHERE santri_id = ? AND tahun = ? AND bulan = ?',
+            [waiver.santri_id, waiver.tahun, bulan]
+          );
+          const matrix = matrixList[0];
+          if (!matrix) continue;
+          const dibayar = Number(matrix.total_dibayar);
+          const tarif = await tarifSyahriyah(kategori, Number(waiver.tahun), bulan);
+          const status = dibayar > 0 && dibayar >= tarif ? 'Lunas' : dibayar > 0 ? 'Sebagian' : 'Belum';
+          await conn.execute(
+            'UPDATE syahriyah_bulan SET nominal_tagihan = ?, status = ?, keringanan = 0 WHERE id = ?',
+            [tarif, status, matrix.id]
+          );
+        }
       }
+
+      await logActivity(
+        {
+          modul: 'Syahriyah',
+          aksi: 'Hapus',
+          deskripsi: `Mencabut keringanan syahriyah ${req.params.id}`,
+          ref_id: req.params.id,
+          userId: req.user?.id,
+        },
+        conn
+      );
     });
     res.status(204).end();
   })
