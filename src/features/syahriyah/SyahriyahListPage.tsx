@@ -24,6 +24,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { SyahriyahPaymentModal } from './SyahriyahPaymentModal';
 import { StrukPembayaranCard, StrukData, StrukItem } from '../../components/ui/StrukPembayaranCard';
 import { KeringananModal } from './KeringananModal';
+import { waiverService, labelKeringanan, SyahriyahWaiver } from '../../lib/waiverService';
 import { authStore, AuthUser } from '../../store/authStore';
 
 const BULAN_NAMES = [
@@ -80,13 +81,18 @@ export const SyahriyahListPage: React.FC = () => {
   const [keringananOpen, setKeringananOpen] = useState(false);
 
   const [matrixData, setMatrixData] = useState<MatrixRow[]>([]);
+  const [waivers, setWaivers] = useState<SyahriyahWaiver[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const loadMatrix = async () => {
     setIsLoading(true);
     try {
-      const data = await syahriyahService.getSyahriyahMatrix(tahun);
+      const [data, daftarKeringanan] = await Promise.all([
+        syahriyahService.getSyahriyahMatrix(tahun),
+        waiverService.getAll(undefined, tahun),
+      ]);
       setMatrixData(data);
+      setWaivers(daftarKeringanan);
     } catch {
       showToast('Gagal memuat matriks syahriyah', 'error');
     } finally {
@@ -382,6 +388,7 @@ export const SyahriyahListPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {paginatedMatrix.map(({ santri, records }) => {
+                  const waiverSantri = waivers.find((w) => w.santri_id === santri.id);
                   return (
                     <tr key={santri.id} className="hover:bg-slate-50/80 transition-colors group">
                       {/* Sticky left column for santri name */}
@@ -393,8 +400,15 @@ export const SyahriyahListPage: React.FC = () => {
                           <span className="font-bold text-[#0F172A] truncate max-w-[150px]">
                             {santri.nama}
                           </span>
-                          
-                        </div>
+                            {waiverSantri && (
+                              <span
+                                title={`${labelKeringanan(waiverSantri)} · ${BULAN_NAMES[waiverSantri.bulan_mulai - 1]}–${BULAN_NAMES[waiverSantri.bulan_selesai - 1]}`}
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap"
+                              >
+                                Keringanan
+                              </span>
+                            )}
+                          </div>
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
                           <span className="font-mono text-slate-600">{santri.nis}</span>
                           <span>•</span>
@@ -479,10 +493,18 @@ export const SyahriyahListPage: React.FC = () => {
             <div className="md:hidden divide-y divide-slate-100">
               {paginatedMatrix.map(({ santri, records }) => {
                 const totalDibayar = records.reduce((sum, rec) => sum + (rec.total_dibayar || 0), 0);
+                const waiverSantri = waivers.find((w) => w.santri_id === santri.id);
                 return (
                   <div key={santri.id} className="p-4 space-y-3">
                     <div>
-                      <p className="font-bold text-[#0F172A]">{santri.nama}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-[#0F172A]">{santri.nama}</p>
+                        {waiverSantri && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
+                            Keringanan
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-slate-500">
                         <span className="font-mono">{santri.nis}</span> • {santri.kategori}
                       </p>
