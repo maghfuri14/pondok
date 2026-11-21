@@ -14,6 +14,8 @@ export interface SyahriyahWaiver {
   bulan_mulai: number;
   bulan_selesai: number;
   jenis: JenisKeringanan;
+  /** Tahun akhir — bisa lintas tahun ke depan; default = tahun. */
+  tahun_selesai?: number;
   /** Nominal potongan untuk jenis 'kustom'; diabaikan untuk 50%/penuh. */
   nominal_per_bulan: number;
   keterangan?: string;
@@ -70,13 +72,15 @@ const tumpangTindih = (
   mulai: number,
   selesai: number
 ): boolean =>
-  waivers.some(
-    (w) =>
-      w.santri_id === santriId &&
-      w.tahun === tahun &&
-      w.bulan_mulai <= selesai &&
-      w.bulan_selesai >= mulai
-  );
+  waivers.some((w) => {
+    // Kurun absolut: tahun * 12 + (bulan - 1) — bisa lintas tahun ke depan.
+    const startAbs = Number(w.tahun) * 12 + (Number(w.bulan_mulai) - 1);
+    const endAbs =
+      (Number(w.tahun_selesai ?? w.tahun)) * 12 + (Number(w.bulan_selesai) - 1);
+    const newStartAbs = tahun * 12 + (mulai - 1);
+    const newEndAbs = (tahun + (selesai < mulai ? 1 : 0)) * 12 + (selesai - 1);
+    return w.santri_id === santriId && startAbs <= newEndAbs && endAbs >= newStartAbs;
+  });
 
 /**
  * Keringanan tagihan syahriyah khusus Super Admin.
@@ -94,15 +98,19 @@ export const waiverService = {
       return response.data.map((w) => ({ ...w, jenis: w.jenis || 'kustom' }));
     }
     return bacaLokal().filter(
-      (w) => (!santriId || w.santri_id === santriId) && (!tahun || w.tahun === tahun)
+      (w) =>
+        (!santriId || w.santri_id === santriId) &&
+        (!tahun || (w.tahun <= tahun && Number(w.tahun_selesai ?? w.tahun) >= tahun))
     );
   },
 
   async create(input: KeringananInput): Promise<SyahriyahWaiver> {
+    // Kurun lintas tahun: selesai < mulai ⇔ berakhir pada tahun berikutnya.
+    const tahunSelesai = input.tahun + (input.bulan_selesai < input.bulan_mulai ? 1 : 0);
     if (
       !Number.isInteger(input.tahun) || input.tahun < 2000 ||
       !Number.isInteger(input.bulan_mulai) || !Number.isInteger(input.bulan_selesai) ||
-      input.bulan_mulai < 1 || input.bulan_selesai > 12 || input.bulan_mulai > input.bulan_selesai ||
+      input.bulan_mulai < 1 || input.bulan_selesai < 1 || input.bulan_selesai > 12 ||
       !['kustom', 'setengah', 'penuh'].includes(input.jenis)
     ) {
       throw new Error('Data keringanan tidak valid');
@@ -115,10 +123,17 @@ export const waiverService = {
     if (isApiMode()) {
       await apiRequest('/api/keringanan/syahriyah', {
         method: 'POST',
-        body: JSON.stringify({ ...input, nominal_per_bulan: nominalKustom }),
+        body: JSON.stringify({ ...input, tahun_selesai: tahunSelesai, nominal_per_bulan: nominalKustom }),
       });
       await syncFromApi();
-      return { ...input, nominal_per_bulan: nominalKustom, id: '', snapshot: {}, created_at: '' };
+      return {
+        ...input,
+        tahun_selesai: tahunSelesai,
+        nominal_per_bulan: nominalKustom,
+        id: '',
+        snapshot: {},
+        created_at: '',
+      };
     }
 
     const list = bacaLokal();
@@ -130,10 +145,14 @@ export const waiverService = {
     if (!santri) throw new Error('Data santri tidak ditemukan');
     const kategori = santri.kategori;
 
+    const startAbs = input.tahun * 12 + (input.bulan_mulai - 1);
+    const endAbs = tahunSelesai * 12 + (input.bulan_selesai - 1);
     const snapshot: Record<string, number> = {};
     const tarifList: number[] = [];
-    for (let bulan = input.bulan_mulai; bulan <= input.bulan_selesai; bulan += 1) {
-      tarifList.push(await getTarifSyahriyah(kategori, input.tahun, bulan));
+    for (let abs = startAbs; abs <= endAbs; abs += 1) {
+      const y = Math.floor(abs / 12);
+      const m = abs - y * 12 + 1;
+      tarifList.push(await getTarifSyahriyah(kategori, y, m));
     }
     const tarifTerkecil = Math.min(...tarifList);
     if (input.jenis === 'kustom' && nominalKustom > tarifTerkecil) {
@@ -142,20 +161,19 @@ export const waiverService = {
       );
     }
 
-    for (let bulan = input.bulan_mulai; bulan <= input.bulan_selesai; bulan += 1) {
-      const tarif = await getTarifSyahriyah(kategori, input.tahun, bulan);
+    for (let i = 0; i < tarifList.length; i += 1) {
+      const abs = startAbs + i;
+      const y = Math.floor(abs / 12);
+      const m = abs - y * 12 + 1;
+      const tarif = tarifList[i];
       const potongan = hitungPotongan(input.jenis, nominalKustom, tarif);
-      snapshot[String(bulan)] = tarif;
-      await syahriyahService.setNominalTagihan(
-        input.santri_id,
-        input.tahun,
-        bulan,
-        Math.max(0, tarif - potongan)
-      );
+      snapshot[String(abs)] = tarif;
+      await syahriyahService.setNominalTagihan(input.santri_id, y, m, Math.max(0, tarif - potongan));
     }
 
     const waiver: SyahriyahWaiver = {
       ...input,
+      tahun_selesai: tahunSelesai,
       nominal_per_bulan: nominalKustom,
       id: `w_${Date.now()}`,
       snapshot,
@@ -192,22 +210,25 @@ export const waiverService = {
     const waiver = list.find((w) => w.id === id);
     if (!waiver) throw new Error('Data keringanan tidak ditemukan');
     const santri = await santriService.getSantriById(waiver.santri_id).catch(() => null);
-    const mulai = Number(waiver.bulan_mulai);
-    const selesai = Number(waiver.bulan_selesai);
-    const baruSelesai = (dariBulan ?? mulai) - 1;
+    const startAbs = waiver.tahun * 12 + (Number(waiver.bulan_mulai) - 1);
+    const endAbs =
+      (Number(waiver.tahun_selesai ?? waiver.tahun)) * 12 + (Number(waiver.bulan_selesai) - 1);
+    // Batas pembatalan: bulan berjalan (atau awal record); covered-until = cut - 1.
+    const baruSelesai = (dariBulan ?? waiver.bulan_mulai) - 1;
+    const newEndAbs = waiver.tahun * 12 + (baruSelesai - 1);
 
-    if (baruSelesai < mulai) {
-      // Keringanan belum mencapai bulan ini → batal total.
+    if (newEndAbs < startAbs || newEndAbs >= endAbs) {
+      // Belum mulai (atau batal di bulan awal) / periode sudah berakhir →
+      // hapus record tanpa menyentuh matriks lunas sebelumnya (harga mati).
       tulisLokal(list.filter((w) => w.id !== id));
-    } else if (baruSelesai < selesai) {
-      // Potong periode: bulan setelah pembatalan kembali ke tarif penuh
-      // (matrix recalc memasukkannya); bulan lunas sebelumnya tetap terikat
-      // keringanan — matrix fix (guard di getSyahriyahMatrix) jaga statusnya.
-      tulisLokal(list.map((w) => (w.id === id ? { ...w, bulan_selesai: baruSelesai } : w)));
     } else {
-      // Periode sudah berakhir sebelum pembatalan → hapus record tanpa
-      // reset nominalkBulan sebelumnya (harga mati tetap keringanan).
-      tulisLokal(list.filter((w) => w.id !== id));
+      // Potong periode: rekor tetap, bulan sebelum cut tetap terikat keringanan
+      // (matrix recalc — guard di getSyahriyahMatrix jaga status lunasnya).
+      const newYear = Math.floor(newEndAbs / 12);
+      const newMonth = newEndAbs - newYear * 12 + 1;
+      tulisLokal(
+        list.map((w) => (w.id === id ? { ...w, bulan_selesai: newMonth, tahun_selesai: newYear } : w))
+      );
     }
 
     activityLogService.catat({

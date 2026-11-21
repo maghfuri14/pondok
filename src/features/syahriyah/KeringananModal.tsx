@@ -78,7 +78,8 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
     if (!s) return;
     let active = true;
     const months: number[] = [];
-    for (let b = bulanMulai; b <= bulanSelesai; b += 1) months.push(b);
+    const selEnd = bulanSelesai < bulanMulai ? bulanSelesai + 12 : bulanSelesai;
+    for (let b = bulanMulai; b <= selEnd; b += 1) months.push(((b - 1) % 12) + 1);
     Promise.all(
       months.map((b) => getTarifSyahriyah(s.kategori, tahunInput, b))
     ).then((values) => {
@@ -97,13 +98,25 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
       : jenis === 'setengah'
         ? Math.round(tarifRentang.min / 2)
         : nominal;
-  const bentrok = waivers.some(
-    (w) => w.bulan_mulai <= bulanSelesai && w.bulan_selesai >= bulanMulai
-  );
-  const totalKeringanan = useMemo(
-    () => nominalEfektif * Math.max(0, bulanSelesai - bulanMulai + 1),
-    [nominalEfektif, bulanMulai, bulanSelesai]
-  );
+  const bentrok = waivers.some((w) => {
+    const startAbs = Number(w.tahun) * 12 + (Number(w.bulan_mulai) - 1);
+    const endAbs =
+      (Number(w.tahun_selesai ?? w.tahun)) * 12 + (Number(w.bulan_selesai) - 1);
+    const newStartAbs = tahunInput * 12 + (bulanMulai - 1);
+    const newEndAbs =
+      (tahunInput + (bulanSelesai < bulanMulai ? 1 : 0)) * 12 + (bulanSelesai - 1);
+    return startAbs <= newEndAbs && endAbs >= newStartAbs;
+  });
+  const totalKeringanan = useMemo(() => {
+    const span = (bulanSelesai < bulanMulai ? bulanSelesai + 12 : bulanSelesai) - bulanMulai + 1;
+    return nominalEfektif * Math.max(0, span);
+  }, [nominalEfektif, bulanMulai, bulanSelesai]);
+
+  // Opsi "Bulan selesai": mulai dari bulan mulai, lalu lanjut ke tahun berikutnya
+  // (jika selesai lebih kecil dari mulai ⇔ lintas tahun).
+  const pilihanSelesai: number[] = [];
+  for (let b = bulanMulai; b <= 12; b += 1) pilihanSelesai.push(b);
+  for (let b = 1; b < bulanMulai; b += 1) pilihanSelesai.push(b);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,10 +235,15 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
                 onChange={(e) => setBulanSelesai(Number(e.target.value))}
                 className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg outline-none"
               >
-                {BULAN_NAMES.map((name, index) => (
-                  <option key={name} value={index + 1}>{name}</option>
+                {pilihanSelesai.map((m) => (
+                  <option key={m} value={m}>
+                    {m >= bulanMulai ? BULAN_NAMES[m - 1] : `${BULAN_NAMES[m - 1]} (Tahun Berikutnya)`}
+                  </option>
                 ))}
               </select>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Jika selesai lebih kecil dari mulai, keringanan lintas tahun ke depan (mis. Des–Jan).
+              </p>
             </div>
           </div>
 
@@ -273,7 +291,7 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
               </div>
             )}
             <p className="text-[11px] text-slate-500 mt-1">
-              Total keringanan {formatRupiah(totalKeringanan)} untuk {Math.max(0, bulanSelesai - bulanMulai + 1)} bulan.
+              Total keringanan {formatRupiah(totalKeringanan)} untuk {Math.max(0, (bulanSelesai < bulanMulai ? bulanSelesai + 12 : bulanSelesai) - bulanMulai + 1)} bulan.
               {jenis === 'kustom' && tarifRentang.min > 0 && (
                 <> Batas maksimal {formatRupiah(tarifRentang.min)}/bulan.</>
               )}
@@ -307,7 +325,9 @@ export const KeringananModal: React.FC<KeringananModalProps> = ({
                   <div key={w.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
                     <div className="text-xs">
                       <p className="font-semibold text-slate-800">
-                        {BULAN_NAMES[w.bulan_mulai - 1]} – {BULAN_NAMES[w.bulan_selesai - 1]} {w.tahun}
+                        {Number(w.tahun_selesai ?? w.tahun) !== w.tahun
+                          ? `${w.tahun} ${BULAN_NAMES[w.bulan_mulai - 1]} – ${BULAN_NAMES[w.bulan_selesai - 1]} ${w.tahun_selesai}`
+                          : `${BULAN_NAMES[w.bulan_mulai - 1]} – ${BULAN_NAMES[w.bulan_selesai - 1]} ${w.tahun}`}
                       </p>
                       <p className="text-slate-500">
                         {formatRupiah(w.nominal_per_bulan)}/bulan{w.keterangan ? ` • ${w.keterangan}` : ''}

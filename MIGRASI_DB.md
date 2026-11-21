@@ -152,6 +152,8 @@ CREATE TABLE IF NOT EXISTS keringanan_syahriyah (
   tahun              SMALLINT UNSIGNED NOT NULL,
   bulan_mulai        TINYINT UNSIGNED NOT NULL,
   bulan_selesai      TINYINT UNSIGNED NOT NULL,
+  tahun_selesai      SMALLINT UNSIGNED NOT NULL DEFAULT 0
+                     COMMENT 'Tahun berakhir - bisa lintas tahun ke depan (default = tahun)',
   jenis              ENUM('kustom','setengah','penuh') NOT NULL DEFAULT 'kustom',
   nominal_per_bulan  BIGINT NOT NULL DEFAULT 0 COMMENT 'Potongan untuk jenis kustom',
   keterangan         TEXT NULL,
@@ -161,10 +163,23 @@ CREATE TABLE IF NOT EXISTS keringanan_syahriyah (
   FOREIGN KEY (santri_id) REFERENCES santri(id) ON DELETE CASCADE,
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT chk_keringanan_bulan CHECK (
-    bulan_mulai BETWEEN 1 AND 12 AND bulan_selesai BETWEEN 1 AND 12 AND bulan_selesai >= bulan_mulai
+    bulan_mulai BETWEEN 1 AND 12 AND bulan_selesai BETWEEN 1 AND 12
+    AND tahun_selesai BETWEEN tahun AND tahun + 1
+    AND (tahun_selesai > tahun OR bulan_selesai >= bulan_mulai)
   ),
   INDEX idx_keringanan_santri (santri_id, tahun)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4c. Migrasi keringanan lintas tahun (sebelum dusai yang sama-sekali tidak ada masalah):
+--     selesai < mulai ⇔ keringanan berakhir pada tahun berikutnya.
+ALTER TABLE keringanan_syahriyah ADD COLUMN IF NOT EXISTS tahun_selesai SMALLINT UNSIGNED NOT NULL DEFAULT 0;
+UPDATE keringanan_syahriyah SET tahun_selesai = tahun WHERE tahun_selesai = 0;
+ALTER TABLE keringanan_syahriyah DROP CONSTRAINT chk_keringanan_bulan;
+ALTER TABLE keringanan_syahriyah ADD CONSTRAINT chk_keringanan_bulan CHECK (
+  bulan_mulai BETWEEN 1 AND 12 AND bulan_selesai BETWEEN 1 AND 12
+  AND tahun_selesai BETWEEN tahun AND tahun + 1
+  AND (tahun_selesai > tahun OR bulan_selesai >= bulan_mulai)
+);
 
 -- 5. transaksi_syahriyah
 CREATE TABLE IF NOT EXISTS transaksi_syahriyah (

@@ -265,7 +265,18 @@ export const syahriyahService = {
     keringanan = true
   ): Promise<void> {
     const stored = getStoredMatrixData();
-    const row = stored[santriId]?.[tahun]?.find((item) => item.bulan === bulan);
+    let yearRows = stored[santriId]?.[tahun];
+    if (!yearRows) {
+      // Pastikan ada baris matriks untuk tahun tersebut (khusus keringanan
+      // lintas tahun: baris tahun akhir belum diload/ditulis).
+      const kategori =
+        (await santriService.getSantriById(santriId).catch(() => null))?.kategori || 'Mukim';
+      yearRows = await createEmptySyahriyahYear(kategori, tahun);
+      if (!stored[santriId]) stored[santriId] = {};
+      stored[santriId][tahun] = yearRows;
+      saveMatrixData(stored);
+    }
+    const row = yearRows.find((item) => item.bulan === bulan);
     if (!row) throw new Error('Data tagihan bulan tidak ditemukan');
     row.nominal_tagihan = nominal;
     row.keringanan = keringanan;

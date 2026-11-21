@@ -25,7 +25,7 @@ async function migrate(): Promise<void> {
   await pastikanDatabase();
   const docPath = fileURLToPath(new URL('../../MIGRASI_DB.md', import.meta.url));
   const markdown = await readFile(docPath, 'utf8');
-  const match = /```sql\n([\s\S]*?)```/.exec(markdown);
+  const match = /```sql\r?\n([\s\S]*?)```/.exec(markdown);
   if (!match) throw new Error('Blok DDL SQL tidak ditemukan di MIGRASI_DB.md');
 
   // Buang baris komentar DULU, baru pecah per ';' — komentar boleh mengandung ';'.

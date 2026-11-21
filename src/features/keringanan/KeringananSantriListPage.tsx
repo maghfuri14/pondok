@@ -16,6 +16,10 @@ const BULAN_NAMES = [
 ];
 
 function formatPeriode(w: SyahriyahWaiver): string {
+  const tSel = Number(w.tahun_selesai ?? w.tahun);
+  if (tSel !== w.tahun) {
+    return `${w.tahun} ${BULAN_NAMES[w.bulan_mulai - 1]} – ${BULAN_NAMES[w.bulan_selesai - 1]} ${tSel}`;
+  }
   return `${BULAN_NAMES[w.bulan_mulai - 1]} – ${BULAN_NAMES[w.bulan_selesai - 1]} ${w.tahun}`;
 }
 
