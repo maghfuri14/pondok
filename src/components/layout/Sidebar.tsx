@@ -9,6 +9,7 @@ import {
   Banknote,
   HandCoins,
   FileBarChart,
+  BadgeDollarSign,
   History,
   Settings,
   LogOut,
@@ -30,6 +31,7 @@ const iconMap: Record<MenuItem['icon'], React.ComponentType<{ className?: string
   HandCoins,
   Banknote,
   FileBarChart,
+  BadgeDollarSign,
   History,
   Settings,
 };

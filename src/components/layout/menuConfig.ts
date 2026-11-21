@@ -2,7 +2,7 @@ export interface MenuItem {
   key: string;
   label: string;
   path: string;
-  icon: 'LayoutDashboard' | 'Users' | 'UserPlus' | 'Wallet' | 'CalendarDays' | 'HandCoins' | 'Banknote' | 'FileBarChart' | 'History' | 'Settings';
+  icon: 'LayoutDashboard' | 'Users' | 'UserPlus' | 'Wallet' | 'CalendarDays' | 'HandCoins' | 'Banknote' | 'FileBarChart' | 'History' | 'Settings' | 'BadgeDollarSign';
   roles: Array<'super_admin' | 'admin' | 'pemilik'>;
 }
 
@@ -11,6 +11,7 @@ export const MENU_CONFIG: MenuItem[] = [
   { key: 'santri',      label: 'Data Santri', path: '/santri',          icon: 'Users',           roles: ['super_admin', 'admin', 'pemilik'] },
   { key: 'pendaftaran', label: 'Pendaftaran', path: '/pendaftaran',     icon: 'UserPlus',        roles: ['super_admin', 'admin', 'pemilik'] },
   { key: 'syahriyah',   label: 'Syahriyah',   path: '/syahriyah',       icon: 'Wallet',          roles: ['super_admin', 'admin', 'pemilik'] },
+  { key: 'keringanan',  label: 'Keringanan',  path: '/keringanan',    icon: 'BadgeDollarSign',  roles: ['super_admin', 'admin', 'pemilik'] },
   { key: 'kilatan',     label: 'Kilatan',     path: '/kilatan',         icon: 'CalendarDays',    roles: ['super_admin', 'admin', 'pemilik'] },
   { key: 'iuran',       label: 'Iuran',       path: '/iuran',           icon: 'HandCoins',      roles: ['super_admin', 'admin', 'pemilik'] },
   { key: 'kas',         label: 'Kas',         path: '/kas',             icon: 'Banknote',        roles: ['super_admin', 'admin', 'pemilik'] },

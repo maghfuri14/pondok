@@ -8,6 +8,7 @@ import SantriListPage from '../features/santri/SantriListPage';
 import SantriDetailPage from '../features/santri/SantriDetailPage';
 import PendaftaranListPage from '../features/pendaftaran/PendaftaranListPage';
 import SyahriyahListPage from '../features/syahriyah/SyahriyahListPage';
+import KeringananSantriListPage from '../features/keringanan/KeringananSantriListPage';
 import KilatanListPage from '../features/kilatan/KilatanListPage';
 import KasListPage from '../features/kas/KasListPage';
 import LaporanPage from '../features/laporan/LaporanPage';
@@ -26,6 +27,7 @@ export const AppRouter: React.FC = () => {
           <Route path="/santri/:id" element={<SantriDetailPage />} />
           <Route path="/pendaftaran" element={<PendaftaranListPage />} />
           <Route path="/syahriyah" element={<SyahriyahListPage />} />
+          <Route path="/keringanan" element={<KeringananSantriListPage />} />
           <Route path="/kilatan" element={<KilatanListPage />} />
           <Route path="/iuran" element={<IuranListPage />} />
           <Route path="/kas" element={<KasListPage />} />
