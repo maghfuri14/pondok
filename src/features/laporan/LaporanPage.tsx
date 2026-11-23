@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FileSpreadsheet,
   FileText,
   Download,
-  Filter,
-  RotateCcw,
-  SearchX,
   Wallet,
   Users,
   UserPlus,
   CreditCard,
   Printer,
-  Eye,
   X,
   HandCoins,
   CalendarDays,
@@ -61,6 +56,63 @@ const labelPeriodeIuran = (j: JenisPeriodeIuran): string => {
   if (j === 'bulanan') return 'Bulanan';
   return 'Tahunan';
 };
+
+const SELECT_CLASS =
+  'block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none';
+const LABEL_CLASS = 'block text-[11px] font-semibold text-slate-500 mb-1';
+
+interface FilterOption {
+  value: string;
+  label: string;
+}
+
+/** Label + select seragam untuk seluruh filter laporan. */
+const FilterField: React.FC<{
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: FilterOption[];
+}> = ({ label, value, onChange, options }) => (
+  <div>
+    <label className={LABEL_CLASS}>{label}</label>
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={SELECT_CLASS}>
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  </div>
+);
+
+/** Sinkron dengan KategoriSantri ('Mukim' | 'Nduduk' | 'Kilatan'). */
+const KATEGORI_OPTIONS: FilterOption[] = [
+  { value: 'Semua', label: 'Semua Kategori' },
+  { value: 'Mukim', label: 'Mukim' },
+  { value: 'Nduduk', label: 'Nduduk' },
+  { value: 'Kilatan', label: 'Kilatan' },
+];
+
+/** Sinkron dengan StatusSantri ('Aktif' | 'Tidak Aktif'). */
+const STATUS_SANTRI_OPTIONS: FilterOption[] = [
+  { value: 'Semua', label: 'Semua Status' },
+  { value: 'Aktif', label: 'Aktif' },
+  { value: 'Tidak Aktif', label: 'Tidak Aktif' },
+];
+
+const STATUS_PENDAFTARAN_OPTIONS: FilterOption[] = [
+  { value: 'Semua', label: 'Semua Status' },
+  { value: 'Baru', label: 'Baru' },
+  { value: 'Diterima', label: 'Diterima' },
+  { value: 'Menjadi Santri', label: 'Menjadi Santri' },
+  { value: 'Ditolak', label: 'Ditolak' },
+];
+
+const JENIS_KEUANGAN_OPTIONS: FilterOption[] = [
+  { value: 'Semua', label: 'Semua Jenis' },
+  { value: 'Pemasukan', label: 'Pemasukan' },
+  { value: 'Pengeluaran', label: 'Pengeluaran' },
+];
 
 const sectionTitles: Record<TabType, string> = {
   keuangan: 'LAPORAN REKAPITULASI KEUANGAN',
@@ -832,21 +884,14 @@ export const LaporanPage: React.FC = () => {
 
       {/* Area Filter Responsive (Card Putih) */}
       <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
-        <div className="flex items-center gap-2 mb-1">
-          <Filter className="w-4 h-4 text-[#059669]" />
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-            Filter Laporan
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           {/* Tahun Filter (All Tabs) */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-500 mb-1">Tahun</label>
+            <label className={LABEL_CLASS}>Tahun</label>
             <select
               value={tahun}
               onChange={(e) => setTahun(Number(e.target.value))}
-              className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+              className={SELECT_CLASS}
             >
               {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
                 <option key={y} value={y}>
@@ -858,165 +903,75 @@ export const LaporanPage: React.FC = () => {
 
           {activeTab === 'keuangan' && (
             <>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Bulan</label>
-                <select
-                  value={bulan}
-                  onChange={(e) => setBulan(e.target.value)}
-                  className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                >
-                  {BULAN_OPTIONS.map((b) => (
-                    <option key={b.value} value={b.value}>
-                      {b.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Jenis Transaksi</label>
-                <select
-                  value={jenisKeuangan}
-                  onChange={(e) => setJenisKeuangan(e.target.value)}
-                  className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                >
-                  <option value="Semua">Semua Jenis</option>
-                  <option value="Pemasukan">Pemasukan</option>
-                  <option value="Pengeluaran">Pengeluaran</option>
-                </select>
-              </div>
+              <FilterField label="Bulan" value={bulan} onChange={setBulan} options={BULAN_OPTIONS} />
+              <FilterField
+                label="Jenis Transaksi"
+                value={jenisKeuangan}
+                onChange={setJenisKeuangan}
+                options={JENIS_KEUANGAN_OPTIONS}
+              />
             </>
           )}
 
           {activeTab === 'santri' && (
             <>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Kategori</label>
-                <select
-                  value={kategoriSantri}
-                  onChange={(e) => setKategoriSantri(e.target.value)}
-                  className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                >
-                  <option value="Semua">Semua</option>
-                  <option value="Yatim">Yatim</option>
-                  <option value="Dhuafa">Dhuafa</option>
-                  <option value="Umum">Umum</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Status</label>
-                <select
-                  value={statusSantri}
-                  onChange={(e) => setStatusSantri(e.target.value)}
-                  className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                >
-                  <option value="Semua">Semua</option>
-                  <option value="Aktif">Aktif</option>
-                  <option value="Nonaktif">Nonaktif</option>
-                </select>
-              </div>
+              <FilterField
+                label="Kategori"
+                value={kategoriSantri}
+                onChange={setKategoriSantri}
+                options={KATEGORI_OPTIONS}
+              />
+              <FilterField
+                label="Status"
+                value={statusSantri}
+                onChange={setStatusSantri}
+                options={STATUS_SANTRI_OPTIONS}
+              />
             </>
           )}
 
           {activeTab === 'pendaftaran' && (
             <>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Bulan</label>
-                <select
-                  value={bulan}
-                  onChange={(e) => setBulan(e.target.value)}
-                  className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                >
-                  {BULAN_OPTIONS.map((b) => (
-                    <option key={b.value} value={b.value}>
-                      {b.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Status</label>
-                <select
-                  value={statusPendaftaran}
-                  onChange={(e) => setStatusPendaftaran(e.target.value)}
-                  className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                >
-                  <option value="Semua">Semua</option>
-                  <option value="Baru">Baru</option>
-                  <option value="Diterima">Diterima</option>
-                  <option value="Menjadi Santri">Menjadi Santri</option>
-                  <option value="Ditolak">Ditolak</option>
-                </select>
-              </div>
+              <FilterField label="Bulan" value={bulan} onChange={setBulan} options={BULAN_OPTIONS} />
+              <FilterField
+                label="Status"
+                value={statusPendaftaran}
+                onChange={setStatusPendaftaran}
+                options={STATUS_PENDAFTARAN_OPTIONS}
+              />
             </>
           )}
 
           {activeTab === 'syahriyah' && (
-            <>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Kategori Santri</label>
-                <select
-                  value={kategoriSantri}
-                  onChange={(e) => setKategoriSantri(e.target.value)}
-                  className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                >
-                  <option value="Semua">Semua</option>
-                  <option value="Yatim">Yatim</option>
-                  <option value="Dhuafa">Dhuafa</option>
-                  <option value="Umum">Umum</option>
-                </select>
-              </div>
-            </>
+            <FilterField
+              label="Kategori Santri"
+              value={kategoriSantri}
+              onChange={setKategoriSantri}
+              options={KATEGORI_OPTIONS}
+            />
           )}
 
           {activeTab === 'iuran' && (
-            <>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Program Iuran</label>
-                <select
-                  value={filterIuran}
-                  onChange={(e) => setFilterIuran(e.target.value)}
-                  className="block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                >
-                  <option value="Semua">Semua Program</option>
-                  {masterIuranList.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.nama}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
+            <FilterField
+              label="Program Iuran"
+              value={filterIuran}
+              onChange={setFilterIuran}
+              options={[
+                { value: 'Semua', label: 'Semua Program' },
+                ...masterIuranList.map((m) => ({ value: m.id, label: m.nama })),
+              ]}
+            />
           )}
 
-          {(activeTab === 'santri' || activeTab === 'pendaftaran' || activeTab === 'syahriyah' || activeTab === 'iuran') && (
-            <div className="flex items-end">
-              <button
-                onClick={handleResetFilter}
-                className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
-              >
-                Reset
-              </button>
-            </div>
-          )}
-
-          {activeTab === 'kilatan' && (
-            <>
-              <div className="flex items-end">
-                <button onClick={handleResetFilter} className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors">
-                  Reset
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Reset button for keuangan shown after filters */}
-          {activeTab === 'keuangan' && (
-            <div className="flex items-end">
-              <button onClick={handleResetFilter} className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors">
-                Reset
-              </button>
-            </div>
-          )}
+          {/* Reset — satu tombol untuk semua tab */}
+          <div className="flex items-end">
+            <button
+              onClick={handleResetFilter}
+              className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+            >
+              Reset
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1101,6 +1056,7 @@ export const LaporanPage: React.FC = () => {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
+                <th className="px-3 py-3 text-xs font-semibold text-slate-500 uppercase">Foto</th>
                 <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">NIS</th>
                 <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nama Santri</th>
                 <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kategori</th>
@@ -1113,6 +1069,23 @@ export const LaporanPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {santriData.map((s) => (
                 <tr key={s.id}>
+                  <td className="px-3 py-2">
+                    {s.foto ? (
+                      <img
+                        src={s.foto}
+                        alt={`Foto ${s.nama}`}
+                        className="mx-auto h-10 w-10 rounded-full border border-slate-200 object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div
+                        aria-label={`Inisial ${s.nama}`}
+                        className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700"
+                      >
+                        {s.nama.trim().substring(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-700 font-mono">{s.nis}</td>
                   <td className="px-4 py-3 text-slate-700">{s.nama}</td>
                   <td className="px-4 py-3 text-slate-700 capitalize">{s.kategori}</td>
@@ -1125,7 +1098,7 @@ export const LaporanPage: React.FC = () => {
             </tbody>
             <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
               <tr>
-                <td colSpan={2} className="px-4 py-3 text-left uppercase">
+                <td colSpan={3} className="px-4 py-3 text-left uppercase">
                   TOTAL ({santriData.length} Santri)
                 </td>
                 <td className="px-4 py-3"></td>
