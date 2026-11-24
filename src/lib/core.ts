@@ -1,9 +1,10 @@
+import { storage } from './storage';
 /**
  * Helper bersama untuk logika bisnis Pondok Al Hidayah.
  *
  * - Tanggal selalu dihitung dalam zona waktu lokal (bukan UTC), agar
  *   tanggal bayar & bulan berjalan sesuai WIB.
- * - Pembacaan localStorage tidak pernah menimpa data yang rusak.
+ * - Pembacaan storage tidak pernah menimpa data yang rusak.
  * - Data demo hanya dipakai saat development.
  */
 
@@ -93,12 +94,12 @@ export class DataRusakError extends Error {
 }
 
 /**
- * Baca JSON dari localStorage.
+ * Baca JSON dari storage.
  * - Key belum ada → kembalikan fallback.
  * - JSON rusak → lempar DataRusakError (JANGAN ditimpa dengan fallback).
  */
 export function readJsonStrict<T>(key: string, fallback: T): T {
-  const raw = localStorage.getItem(key);
+  const raw = storage.getItem(key);
   if (raw === null) return fallback;
   try {
     return JSON.parse(raw) as T;
@@ -112,11 +113,11 @@ export function readJsonStrict<T>(key: string, fallback: T): T {
  * untuk mengembalikan kondisi semula jika operasi gagal di tengah jalan.
  */
 export function snapshotKeys(keys: string[]): () => void {
-  const saved = keys.map((k) => [k, localStorage.getItem(k)] as const);
+  const saved = keys.map((k) => [k, storage.getItem(k)] as const);
   return () => {
     for (const [k, v] of saved) {
-      if (v === null) localStorage.removeItem(k);
-      else localStorage.setItem(k, v);
+      if (v === null) storage.removeItem(k);
+      else storage.setItem(k, v);
     }
   };
 }
@@ -225,7 +226,7 @@ export function hasRiwayatPembayaran(santriId: string): boolean {
  * Nomor kuitansi berformat AH/tahun/nomor urut, berurutan per tahun.
  * Contoh: AH/2026/0001. Panggil hanya setelah validasi lolos.
  *
- * Counter localStorage bisa hilang/tertinggal (mis. setelah restore backup
+ * Counter storage bisa hilang/tertinggal (mis. setelah restore backup
  * lama). Karena itu nomor berikutnya selalu direkonsiliasi dengan nomor
  * kuitansi yang sudah ada di transaksi syahriyah & kilatan agar tidak duplikat.
  */
@@ -241,7 +242,7 @@ export function nextNomorKuitansi(tahun: number): string {
   const next = Math.max(counter, maxNomorKuitansiTerpakai(tahun)) + 1;
 
   counters[key] = next;
-  localStorage.setItem(KEY_NOMOR_KUITANSI, JSON.stringify(counters));
+  storage.setItem(KEY_NOMOR_KUITANSI, JSON.stringify(counters));
   return `AH/${tahun}/${String(next).padStart(4, '0')}`;
 }
 

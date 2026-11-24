@@ -20,6 +20,7 @@ import { todayLocal } from '../../lib/core';
 import { formatRupiah } from '../../lib/formatter';
 import { showToast } from '../../components/ui/Toast';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { Pagination } from '../../components/ui/Pagination';
 import { SyahriyahPaymentModal } from './SyahriyahPaymentModal';
 import { StrukPembayaranCard, StrukData, StrukItem } from '../../components/ui/StrukPembayaranCard';
 
@@ -134,6 +135,11 @@ export const SyahriyahListPage: React.FC = () => {
 
   const startItem = totalFiltered === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalFiltered);
+
+  // Jika filter/data menyusut, jangan biarkan halaman aktif melewati batas.
+  useEffect(() => {
+    setCurrentPage((p) => Math.min(p, Math.max(1, totalPages)));
+  }, [totalPages]);
 
   const handleCellClick = (santri: Santri, record: SyahriyahBulan) => {
     if (isPemilik) return;
@@ -484,20 +490,23 @@ export const SyahriyahListPage: React.FC = () => {
                 const totalDibayar = records.reduce((sum, rec) => sum + (rec.total_dibayar || 0), 0);
                 const waiverSantri = waivers.find((w) => w.santri_id === santri.id);
                 return (
-                  <div key={santri.id} className="p-4 space-y-3">
-                    <div>
+                  <div key={santri.id} className="p-3 space-y-2">
+                    {/* Info santri — rapat dengan grid bulan */}
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="font-bold text-[#0F172A]">{santri.nama}</p>
+                        <p className="truncate font-bold text-[#0F172A]">{santri.nama}</p>
                         {waiverSantri && (
                           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
                             Keringanan
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="mt-0.5 text-[11px] text-slate-500">
                         <span className="font-mono">{santri.nis}</span> • {santri.kategori}
                       </p>
                     </div>
+
+                    {/* Grid bulan: 6 kolom (2 baris) dengan target tap besar + indikator warna */}
                     <div className="grid grid-cols-6 gap-1.5">
                       {records.map((rec) => {
                         const isOff =
@@ -509,29 +518,40 @@ export const SyahriyahListPage: React.FC = () => {
                             type="button"
                             disabled={isPemilik || isOff}
                             onClick={() => handleCellClick(santri, rec)}
-                            className={`rounded-md border py-1.5 text-center transition-colors ${
+                            className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-lg border py-2 text-center transition-all active:scale-95 ${
                               isOff
-                                ? 'bg-slate-100 border-slate-200 text-slate-400'
+                                ? 'border-slate-200 bg-slate-100 text-slate-400'
                                 : rec.status === 'Lunas'
-                                  ? 'bg-emerald-100 border-emerald-200 text-emerald-700'
+                                  ? 'border-emerald-300 bg-emerald-100 text-emerald-700'
                                   : rec.status === 'Sebagian'
-                                    ? 'bg-amber-100 border-amber-200 text-amber-700'
-                                    : 'bg-slate-50 border-slate-200 text-slate-400'
+                                    ? 'border-amber-300 bg-amber-100 text-amber-700'
+                                    : 'border-rose-200 bg-rose-50 text-rose-500'
                             }`}
                           >
-                            <span className="block text-[9px] leading-none text-slate-500">
+                            <span className="block text-[10px] font-semibold leading-none opacity-80">
                               {BULAN_NAMES[rec.bulan - 1] || rec.bulan}
                             </span>
-                            <span className="text-sm font-bold leading-tight">
+                            <span className="text-base font-extrabold leading-none">
                               {isOff ? '—' : rec.status === 'Lunas' ? '✓' : rec.status === 'Sebagian' ? '½' : '•'}
                             </span>
                           </button>
                         );
                       })}
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Total dibayar: <span className="font-semibold text-emerald-700">{formatRupiah(totalDibayar)}</span>
-                    </p>
+
+                    {/* Total dibayar — badge menonjol */}
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        Total dibayar
+                      </span>
+                      <span
+                        className={`text-sm font-extrabold tabular-nums ${
+                          totalDibayar > 0 ? 'text-emerald-700' : 'text-rose-600'
+                        }`}
+                      >
+                        {formatRupiah(totalDibayar)}
+                      </span>
+                    </div>
                   </div>
                 );
               })}
@@ -547,57 +567,17 @@ export const SyahriyahListPage: React.FC = () => {
               <span className="font-semibold text-[#0F172A]">{totalFiltered}</span> santri
             </div>
 
-            <div className="flex items-center gap-4 flex-wrap">
-              {/* Page Size Dropdown */}
-              <div className="flex items-center gap-2">
-                <span>Per halaman:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="px-2 py-1 border border-slate-200 rounded-md bg-white text-slate-700 outline-none focus:border-[#059669] cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
-
-              {/* Pagination Controls */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors cursor-pointer"
-                >
-                  Prev
-                </button>
-
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setCurrentPage(p)}
-                    className={`w-7 h-7 rounded-md font-medium text-xs flex items-center justify-center transition-colors cursor-pointer ${
-                      currentPage === p
-                        ? 'bg-[#059669] text-white font-bold'
-                        : 'border border-slate-200 bg-white hover:bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-
-                <button
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors cursor-pointer"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <Pagination
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalItems={totalFiltered}
+              label="santri"
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+            />
           </div>
         )}
       </div>

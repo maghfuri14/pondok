@@ -1,9 +1,10 @@
+import { storage } from './storage';
 /**
  * Utilitas foto santri.
  *
- * Foto disimpan sebagai data URL di field `santri.foto` (localStorage / kolom TEXT DB).
+ * Foto disimpan sebagai data URL di field `santri.foto` (storage / kolom TEXT DB).
  * Karena itu gambar dikompresi ke maksimal 320px dan ±48 KB base64 supaya:
- * - tidak menabrak kuota localStorage di mode lokal,
+ * - tidak menabrak kuota storage di mode lokal,
  * - tidak melebihi batas kolom `foto TEXT` (~65 KB) di mode API.
  */
 

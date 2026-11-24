@@ -1,9 +1,10 @@
+import { storage } from './storage';
 import { BACKUP_APP_ID, BACKUP_VERSION } from './backupService';
 import { apiRequest } from './apiClient';
 import { syncFromApi } from './apiCache';
 
 /**
- * Backup/restore dalam mode API memakai endpoint server, bukan localStorage.
+ * Backup/restore dalam mode API memakai endpoint server, bukan storage.
  * Format file sama dengan envelope backup aplikasi, tetapi `data` berisi tabel DB.
  */
 export async function unduhBackupApi(): Promise<{
@@ -34,7 +35,7 @@ export async function pulihkanBackupApi(json: unknown): Promise<number> {
   const kunciLokal = Object.keys(data).filter((key) => key.startsWith('al_hidayah_'));
   if (kunciLokal.length > 0) {
     throw new Error(
-      'Backup format localStorage tidak dapat dipulihkan dalam mode API. Gunakan backup yang diunduh dari menu ini.'
+      'Backup format storage tidak dapat dipulihkan dalam mode API. Gunakan backup yang diunduh dari menu ini.'
     );
   }
 

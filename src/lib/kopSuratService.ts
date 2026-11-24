@@ -1,7 +1,8 @@
+import { storage } from './storage';
 /**
  * Service Desain Kop Surat.
  *
- * Menyimpan konfigurasi desain + gambar kop (dataURL PNG) di localStorage
+ * Menyimpan konfigurasi desain + gambar kop (dataURL PNG) di storage
  * dengan key `al_hidayah_kop_surat` (terdaftar di BACKUP_SPECS agar ikut
  * Backup & Restore). Gambar ini dipakai `buildLaporanPdfDoc()` untuk
  * menumpuk kop di atas PDF laporan/rekap.
@@ -338,7 +339,7 @@ export const kopSuratService = {
   /** Ambil seluruh penyimpanan kop (config + gambar). Belum pernah disimpan → null. */
   get(): KopSuratStorage | null {
     try {
-      const raw = localStorage.getItem(KOP_STORAGE_KEY);
+      const raw = storage.getItem(KOP_STORAGE_KEY);
       if (!raw) return null;
       const parsed: unknown = JSON.parse(raw);
       if (!isObj(parsed)) return null;
@@ -378,7 +379,7 @@ export const kopSuratService = {
       image,
       updatedAt: new Date().toISOString(),
     };
-    localStorage.setItem(KOP_STORAGE_KEY, JSON.stringify(data));
+    storage.setItem(KOP_STORAGE_KEY, JSON.stringify(data));
   },
 
   getDefault(): KopSuratConfig {

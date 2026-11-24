@@ -5,6 +5,7 @@ import {
   formatSaldo,
   formatThousand,
   parseThousand,
+  formatTanggalTable,
 } from '../src/lib/formatter';
 
 test('formatRupiah tidak menampilkan tagihan negatif', () => {
@@ -16,6 +17,14 @@ test('formatSaldo mempertahankan nilai negatif', () => {
   const hasil = formatSaldo(-5000);
   assert.ok(hasil.includes('5.000'));
   assert.ok(hasil.includes('-'));
+});
+
+test('formatTanggalTable memakai format dd-mmm-yyyy', () => {
+  assert.equal(formatTanggalTable('2026-11-24'), '24-Nov-2026');
+  assert.equal(formatTanggalTable('2026-05-07'), '07-Mei-2026');
+  assert.equal(formatTanggalTable(''), '-');
+  assert.equal(formatTanggalTable(undefined), '-');
+  assert.equal(formatTanggalTable('bukan-tanggal'), 'bukan-tanggal');
 });
 
 test('formatThousand dan parseThousand menangani input ribuan', () => {

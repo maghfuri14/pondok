@@ -67,6 +67,7 @@ aktivitasRoutes.post(
 aktivitasRoutes.get(
   '/backup',
   requireAuth,
+  requireRole(...ADMIN_ROLES),
   asyncHandler(async (_req, res) => {
     const tables = [
       'users', 'santri', 'santri_periode_nonaktif', 'syahriyah_bulan', 'keringanan_syahriyah', 'transaksi_syahriyah',

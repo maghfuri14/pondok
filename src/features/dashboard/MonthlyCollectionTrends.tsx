@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { syahriyahService } from '../../lib/syahriyahService';
 import { kilatanService } from '../../lib/kilatanService';
+import { KILATAN_EVENT_MONTH } from '../../lib/constants/kilatan';
 import { formatRupiah } from '../../lib/formatter';
 
 const BULAN_NAMES = [
@@ -58,14 +59,6 @@ const BULAN_FULL = [
   'November',
   'Desember',
 ];
-
-// Mapping event kilatan ke perkiraan bulan kalender pondok
-const EVENT_MONTH_MAP: Record<string, number> = {
-  Romadhon: 3, // Maret
-  Dzulhijjah: 6, // Juni
-  Maulid: 9, // September
-  'Jumadil Ula': 11, // November
-};
 
 interface MonthlyDataPoint {
   bulanIdx: number;
@@ -140,7 +133,7 @@ export const MonthlyCollectionTrends: React.FC = () => {
       let kilatanEventName: string | undefined = undefined;
 
       // Find if an event matches this month
-      const matchingEvents = Object.entries(EVENT_MONTH_MAP).filter(
+      const matchingEvents = Object.entries(KILATAN_EVENT_MONTH).filter(
         ([, monthNum]) => monthNum === m
       );
 

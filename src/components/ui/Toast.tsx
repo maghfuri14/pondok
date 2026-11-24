@@ -31,9 +31,11 @@ export const ToastContainer: React.FC = () => {
       const newToast = customEvent.detail;
       setToasts((prev) => [...prev, newToast]);
 
+      // Error lebih lama dibaca; sukses/info cukup 3 detik.
+      const durasi = newToast.type === 'error' ? 5000 : 3000;
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== newToast.id));
-      }, 3000);
+      }, durasi);
     };
 
     window.addEventListener(TOAST_EVENT, handleToast);
@@ -43,7 +45,11 @@ export const ToastContainer: React.FC = () => {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999] flex flex-col gap-2 max-w-sm w-full px-4 pointer-events-none">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999] flex flex-col gap-2 max-w-sm w-full px-4 pointer-events-none"
+    >
       {toasts.map((toast) => {
         const bgStyles = {
           success: 'bg-[#059669] text-white',

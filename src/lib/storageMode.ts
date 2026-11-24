@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import type { ApiMode } from './apiClient';
 
 const MODE_KEY = 'al_hidayah_mode';
@@ -5,22 +6,29 @@ const VERSION_KEY = 'al_hidayah_storage_version';
 const VERSION = '2';
 
 /**
- * Bersihkan cache localStorage sekali kali ketika versi/mode berubah.
+ * Bersihkan cache storage sekali kali ketika versi/mode berubah.
  * Mencegah data hasil sinkron API (mis. 3 santri smoke) tetap dipakai
  * ketika aplikasi kembali ke mode lokal, dan sebaliknya.
  */
 export function siapkanStorage(mode: ApiMode): void {
-  if (typeof localStorage === 'undefined') return;
+  // Produksi memakai storage memori yang selalu kosong saat start — tidak perlu
+  // metadata mode/version, dan tidak ada satu pun yang ditulis ke browser.
+  if (mode === 'api') return;
+  if (typeof storage === 'undefined') return;
 
-  const modeSebelumnya = localStorage.getItem(MODE_KEY);
-  const versiSebelumnya = localStorage.getItem(VERSION_KEY);
+  const modeSebelumnya = storage.getItem(MODE_KEY);
+  const versiSebelumnya = storage.getItem(VERSION_KEY);
   const perluBersih = versiSebelumnya !== VERSION || (modeSebelumnya && modeSebelumnya !== mode);
 
   if (perluBersih) {
-    const kunci = Object.keys(localStorage).filter((key) => key.startsWith('al_hidayah_'));
-    kunci.forEach((key) => localStorage.removeItem(key));
-    localStorage.setItem(VERSION_KEY, VERSION);
+    const kunci: string[] = [];
+    for (let i = 0; i < storage.length; i += 1) {
+      const key = storage.key(i);
+      if (key?.startsWith('al_hidayah_')) kunci.push(key);
+    }
+    kunci.forEach((key) => storage.removeItem(key));
+    storage.setItem(VERSION_KEY, VERSION);
   }
 
-  localStorage.setItem(MODE_KEY, mode);
+  storage.setItem(MODE_KEY, mode);
 }

@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { readJsonStrict } from './core';
 import { apiRequest, isApiMode } from './apiClient';
 import { syncFromApi } from './apiCache';
@@ -42,7 +43,7 @@ const bacaLokal = (): SyahriyahWaiver[] =>
   }));
 
 const tulisLokal = (list: SyahriyahWaiver[]): void => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  storage.setItem(STORAGE_KEY, JSON.stringify(list));
 };
 
 /** Potongan rupiah berdasarkan jenis keringanan & tarif yang berlaku. */

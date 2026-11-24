@@ -1,3 +1,4 @@
+import { storage } from '../lib/storage';
 import { pengaturanService } from '../lib/pengaturanService';
 
 export type UserRole = 'super_admin' | 'admin' | 'pemilik';
@@ -34,9 +35,9 @@ export const authStore = {
   async getUser(): Promise<AuthUser | null> {
     try {
       const data =
-        localStorage.getItem(STORAGE_KEY) ||
-        localStorage.getItem(LEGACY_STORAGE_KEY) ||
-        localStorage.getItem(LEGACY_USER_KEY);
+        storage.getItem(STORAGE_KEY) ||
+        storage.getItem(LEGACY_STORAGE_KEY) ||
+        storage.getItem(LEGACY_USER_KEY);
       if (!data) return null;
 
       const parsed = JSON.parse(data) as Partial<AuthUser> | null;
@@ -44,7 +45,7 @@ export const authStore = {
         return null;
       }
 
-      // Jangan percaya role/nama di localStorage. Cocokkan dengan data akun
+      // Jangan percaya role/nama di storage. Cocokkan dengan data akun
       // yang tersimpan agar perubahan role atau penonaktifan akun langsung
       // berlaku, dan session palsu tidak bisa menaikkan hak akses.
       const username = parsed.username.trim().toLowerCase();
@@ -64,18 +65,18 @@ export const authStore = {
   },
 
   setUser(user: AuthUser) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    storage.setItem(STORAGE_KEY, JSON.stringify(user));
   },
 
   clearUser() {
-    // Hanya hapus session auth. JANGAN clear seluruh localStorage
+    // Hanya hapus session auth. JANGAN clear seluruh storage
     // agar data santri, syahriyah, kas, dll tetap aman.
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    localStorage.removeItem(LEGACY_USER_KEY);
+    storage.removeItem(STORAGE_KEY);
+    storage.removeItem(LEGACY_STORAGE_KEY);
+    storage.removeItem(LEGACY_USER_KEY);
   },
 
-  logout() {
+  logout(): void | Promise<void> {
     this.clearUser();
     window.location.href = '/login';
   },

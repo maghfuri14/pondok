@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { Pendaftaran, StatusPendaftaran } from '../types/pendaftaran';
 import { Santri } from '../types/santri';
 import { santriService } from './santriService';
@@ -22,17 +23,17 @@ function delay(ms = 300): Promise<void> {
 }
 
 function getStoredPendaftaran(): Pendaftaran[] {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = storage.getItem(STORAGE_KEY);
   if (raw === null) {
     const seed = SEED_DEMO_DATA ? MOCK_PENDAFTARAN : [];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
+    storage.setItem(STORAGE_KEY, JSON.stringify(seed));
     return seed;
   }
   return readJsonStrict<Pendaftaran[]>(STORAGE_KEY, []);
 }
 
 function savePendaftaranList(list: Pendaftaran[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  storage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
 
 export const pendaftaranService = {

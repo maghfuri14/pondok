@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { Kas } from '../types/kas';
 import { SEED_DEMO_DATA, generateId, isNominalValid, readJsonStrict, currentYmLocal, snapshotKeys, isValidCalendarDate } from './core';
 import { activityLogService } from './activityLogService';
@@ -17,17 +18,17 @@ function delay(ms = 300): Promise<void> {
 }
 
 function getStoredKas(): Kas[] {
-  const raw = localStorage.getItem(KAS_STORAGE_KEY);
+  const raw = storage.getItem(KAS_STORAGE_KEY);
   if (raw === null) {
     const seed = SEED_DEMO_DATA ? MOCK_KAS : [];
-    localStorage.setItem(KAS_STORAGE_KEY, JSON.stringify(seed));
+    storage.setItem(KAS_STORAGE_KEY, JSON.stringify(seed));
     return seed;
   }
   return readJsonStrict<Kas[]>(KAS_STORAGE_KEY, []);
 }
 
 function saveKasList(list: Kas[]): void {
-  localStorage.setItem(KAS_STORAGE_KEY, JSON.stringify(list));
+  storage.setItem(KAS_STORAGE_KEY, JSON.stringify(list));
 }
 
 function validateKas(data: Pick<Kas, 'tanggal' | 'jenis' | 'nominal' | 'kategori_nama'>) {

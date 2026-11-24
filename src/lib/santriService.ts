@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { Santri } from '../types/santri';
 import { INITIAL_MOCK_SANTRI } from './mockSantri';
 import { SEED_DEMO_DATA, generateId, hasRiwayatPembayaran, readJsonStrict, todayLocal, isValidCalendarDate } from './core';
@@ -18,10 +19,10 @@ function delay(ms = 300): Promise<void> {
 }
 
 function getStoredSantri(): Santri[] {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = storage.getItem(STORAGE_KEY);
   if (raw === null) {
     const seed = SEED_DEMO_DATA ? INITIAL_MOCK_SANTRI : [];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
+    storage.setItem(STORAGE_KEY, JSON.stringify(seed));
     return seed;
   }
   return readJsonStrict<Santri[]>(STORAGE_KEY, []);
@@ -29,7 +30,7 @@ function getStoredSantri(): Santri[] {
 
 function saveSantriList(list: Santri[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    storage.setItem(STORAGE_KEY, JSON.stringify(list));
   } catch (err) {
     const nama = err instanceof DOMException ? err.name : '';
     if (nama === 'QuotaExceededError' || nama === 'NS_ERROR_DOM_QUOTA_REACHED') {

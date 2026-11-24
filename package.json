@@ -13,7 +13,7 @@
     "server": "tsx server/src/index.ts",
     "dev:server": "tsx watch server/src/index.ts",
     "db:migrate": "tsx server/src/migrate.ts",
-    "test": "tsx --test tests/formatter.test.ts tests/core.test.ts tests/kategoriKas.test.ts tests/backupService.test.ts tests/iuranPembayaran.test.ts tests/pembatalanPembayaran.test.ts tests/pengaturan.test.ts tests/nis.test.ts tests/santriImport.test.ts tests/santriFoto.test.ts tests/zipHelper.test.ts tests/bulkSelection.test.ts tests/laporanKilatanPerSantri.test.ts tests/aktivitas.test.ts tests/keringanan.test.ts",
+    "test": "tsx --test tests/apiClient.test.ts tests/formatter.test.ts tests/core.test.ts tests/kategoriKas.test.ts tests/backupService.test.ts tests/iuranPembayaran.test.ts tests/pembatalanPembayaran.test.ts tests/pengaturan.test.ts tests/nis.test.ts tests/santriImport.test.ts tests/santriFoto.test.ts tests/zipHelper.test.ts tests/bulkSelection.test.ts tests/laporanKilatanPerSantri.test.ts tests/aktivitas.test.ts tests/keringanan.test.ts",
     "test:e2e": "playwright test",
     "test:smoke": "node server/tests/smoke.mjs"
   },

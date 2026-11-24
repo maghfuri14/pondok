@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import {
   SyahriyahBulan,
   StatusSyahriyah,
@@ -104,7 +105,7 @@ function getStoredMatrixData(): MatrixStore {
 }
 
 function saveMatrixData(data: MatrixStore): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  storage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function getStoredTransaksiData(): SyahriyahTransaksiRecord[] {
@@ -112,7 +113,7 @@ function getStoredTransaksiData(): SyahriyahTransaksiRecord[] {
 }
 
 function saveTransaksiData(list: SyahriyahTransaksiRecord[]): void {
-  localStorage.setItem(TRANSAKSI_KEY, JSON.stringify(list));
+  storage.setItem(TRANSAKSI_KEY, JSON.stringify(list));
 }
 
 /** Daftar bulan (YYYY-MM) yang sudah ada pembayaran syahriyah. */

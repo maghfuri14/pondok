@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { todayLocal, escapeHtml } from './core';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -91,7 +92,7 @@ export async function getKwitansiConfig(): Promise<KwitansiConfig> {
   const profil = await pengaturanService.getProfil();
   const defaultConfig: KwitansiConfig = { ...DEFAULT_KWITANSI_CONFIG, nama_penandatangan: profil.bendahara || "Shofil Mubarok" };
   try {
-    const raw = localStorage.getItem('al_hidayah_kwitansi_config');
+    const raw = storage.getItem('al_hidayah_kwitansi_config');
     if (!raw) return defaultConfig;
     const parsed = JSON.parse(raw);
     return {

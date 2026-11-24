@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { generateId, readJsonStrict } from './core';
 
 export const ACTIVITY_LOG_KEY = 'al_hidayah_activity_log';
@@ -43,7 +44,7 @@ export interface CatatActivityInput {
 /** Baca username dari sesi tanpa memvalidasi ke daftar akun (cukup untuk label riwayat). */
 function currentUsername(): string | undefined {
   try {
-    const raw = localStorage.getItem('al_hidayah_auth_user');
+    const raw = storage.getItem('al_hidayah_auth_user');
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as { username?: unknown } | null;
     return parsed && typeof parsed.username === 'string' ? parsed.username : undefined;
@@ -66,7 +67,7 @@ export const activityLogService = {
         user: currentUsername(),
         ...input,
       };
-      localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify([entry, ...list].slice(0, MAX_ENTRIES)));
+      storage.setItem(ACTIVITY_LOG_KEY, JSON.stringify([entry, ...list].slice(0, MAX_ENTRIES)));
     } catch {
       // abaikan: riwayat aktivitas bersifat pelengkap
     }
@@ -79,6 +80,6 @@ export const activityLogService = {
   },
 
   clear(): void {
-    localStorage.removeItem(ACTIVITY_LOG_KEY);
+    storage.removeItem(ACTIVITY_LOG_KEY);
   },
 };

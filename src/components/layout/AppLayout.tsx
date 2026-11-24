@@ -17,6 +17,14 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] overflow-hidden">
+      {/* Skip link untuk keyboard/screen reader */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[10000] focus:rounded-lg focus:bg-[#059669] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Lewati ke konten utama
+      </a>
+
       {/* 1. SIDEBAR DESKTOP (Fixed Width) */}
       <div className="hidden lg:block w-[260px] shrink-0 h-full z-40">
         <Sidebar user={user} />
@@ -31,7 +39,7 @@ export const AppLayout: React.FC = () => {
         <Topbar user={user} onMenuClick={() => setDrawerOpen(true)} />
 
         {/* KONTEN UTAMA (Scrollable) */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#F8FAFC]">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#F8FAFC] outline-none">
           <Outlet />
         </main>
       </div>

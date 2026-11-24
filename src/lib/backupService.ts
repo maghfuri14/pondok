@@ -1,3 +1,4 @@
+import { storage } from './storage';
 /**
  * Backup & restore data Pondok Al Hidayah.
  *
@@ -205,7 +206,7 @@ export const BACKUP_KEYS = Object.keys(BACKUP_SPECS);
 
 /**
  * Key yang sengaja tidak dipulihkan. Key ini boleh ada di file backup lama,
- * tetapi nilainya tidak akan pernah ditulis kembali ke localStorage.
+ * tetapi nilainya tidak akan pernah ditulis kembali ke storage.
  */
 const IGNORED_BACKUP_KEYS = new Set([
   'al_hidayah_auth_user',
@@ -221,11 +222,11 @@ export type BackupValidation =
 const fail = (message: string): BackupValidation => ({ ok: false, message });
 
 /** Susun objek backup dari key data yang dikenal saja. */
-export function buildBackup(storage: StorageLike = localStorage): BackupEnvelope {
+export function buildBackup(sumber: StorageLike = storage): BackupEnvelope {
   const data: Record<string, unknown> = {};
 
   for (const key of BACKUP_KEYS) {
-    const raw = storage.getItem(key);
+    const raw = sumber.getItem(key);
     if (raw === null) continue;
     try {
       data[key] = JSON.parse(raw);
@@ -411,7 +412,7 @@ export function validateBackup(raw: unknown): BackupValidation {
  */
 export function restoreBackup(
   raw: unknown,
-  storage: StorageLike = localStorage
+  tujuan: StorageLike = storage
 ): { restored: number; ignored: string[] } {
   const validation = validateBackup(raw);
   if (!validation.ok) {
@@ -419,16 +420,16 @@ export function restoreBackup(
   }
 
   const entries = Object.entries(validation.data);
-  const snapshot = entries.map(([key]) => [key, storage.getItem(key)] as const);
+  const snapshot = entries.map(([key]) => [key, tujuan.getItem(key)] as const);
 
   try {
     for (const [key, value] of entries) {
-      storage.setItem(key, JSON.stringify(value));
+      tujuan.setItem(key, JSON.stringify(value));
     }
   } catch (error) {
     for (const [key, previous] of snapshot) {
-      if (previous === null) storage.removeItem(key);
-      else storage.setItem(key, previous);
+      if (previous === null) tujuan.removeItem(key);
+      else tujuan.setItem(key, previous);
     }
     throw error;
   }

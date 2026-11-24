@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import {
   KilatanEvent,
   EventKilatan,
@@ -7,6 +8,10 @@ import {
   KilatanTransaksiRecord,
 } from '../types/kilatan';
 import { Santri } from '../types/santri';
+import { KILATAN_EVENTS, KILATAN_EVENT_MONTH } from './constants/kilatan';
+
+// Re-export agar import lama dari kilatanService tetap berfungsi.
+export { KILATAN_EVENTS };
 import { santriService } from './santriService';
 import { kasService, KAS_STORAGE_KEY } from './kasService';
 import { activityLogService } from './activityLogService';
@@ -25,16 +30,6 @@ import {
 const STORAGE_KEY = 'al_hidayah_kilatan';
 const TRANSAKSI_KEY = 'al_hidayah_kilatan_transaksi';
 
-export const KILATAN_EVENTS: EventKilatan[] = ['Jumadil Ula', 'Maulid', 'Romadhon', 'Dzulhijjah'];
-
-/** Bulan representatif tiap event, untuk lookup tarif dan urutan pendaftaran. */
-const EVENT_MONTH_MAP: Record<EventKilatan, number> = {
-  Romadhon: 3,
-  Dzulhijjah: 6,
-  Maulid: 9,
-  'Jumadil Ula': 11,
-};
-
 export async function getTarifKilatan(): Promise<number> {
   const tarif = await pengaturanService.getTarif();
   return tarif.event_kilatan;
@@ -42,7 +37,7 @@ export async function getTarifKilatan(): Promise<number> {
 
 /** Tarif event kilatan untuk tahun tertentu (menghormati riwayat tarif). */
 export async function getTarifKilatanForEvent(tahun: number, event: EventKilatan): Promise<number> {
-  const bulan = EVENT_MONTH_MAP[event] || 1;
+  const bulan = KILATAN_EVENT_MONTH[event] || 1;
   const tarif = await getTarifForPeriod(`${tahun}-${String(bulan).padStart(2, '0')}`);
   return tarif.event_kilatan;
 }
@@ -59,7 +54,7 @@ export function isKilatanBeforeEntry(tanggalMasuk: string, tahun: number, event:
   const entryMonth = parseInt(m[2], 10);
   if (tahun < entryYear) return true;
   if (tahun > entryYear) return false;
-  return EVENT_MONTH_MAP[event] < entryMonth;
+  return KILATAN_EVENT_MONTH[event] < entryMonth;
 }
 
 /** Apakah event jatuh di masa tidak aktif santri (tidak ditagih & tidak bisa dibayar). */
@@ -68,7 +63,7 @@ export function isKilatanSetelahKeluar(
   tahun: number,
   event: EventKilatan
 ): boolean {
-  const bulan = EVENT_MONTH_MAP[event] || 1;
+  const bulan = KILATAN_EVENT_MONTH[event] || 1;
   if (santri.periode_nonaktif && santri.periode_nonaktif.length) {
     return isBulanGapNonaktif(santri.periode_nonaktif, tahun, bulan);
   }
@@ -97,7 +92,7 @@ function getStoredMatrixData(): MatrixStore {
 }
 
 function saveMatrixData(data: MatrixStore): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  storage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function getStoredTransaksiData(): KilatanTransaksiRecord[] {
@@ -105,7 +100,7 @@ function getStoredTransaksiData(): KilatanTransaksiRecord[] {
 }
 
 function saveTransaksiData(list: KilatanTransaksiRecord[]): void {
-  localStorage.setItem(TRANSAKSI_KEY, JSON.stringify(list));
+  storage.setItem(TRANSAKSI_KEY, JSON.stringify(list));
 }
 
 /** Daftar bulan (YYYY-MM) yang sudah ada pembayaran kilatan (event dipetakan ke bulan representatif). */
@@ -116,7 +111,7 @@ export function getKilatanMonthsWithPayments(): string[] {
     for (const tahunStr of Object.keys(stored[santriId])) {
       for (const r of stored[santriId][parseInt(tahunStr, 10)] || []) {
         if (r.total_dibayar > 0) {
-          const bulan = EVENT_MONTH_MAP[r.event] || 1;
+          const bulan = KILATAN_EVENT_MONTH[r.event] || 1;
           months.add(`${r.tahun}-${String(bulan).padStart(2, '0')}`);
         }
       }
@@ -138,7 +133,7 @@ export async function applyNewKilatanTarifToUnpaid(
       const yearRecords = stored[santriId][tahun] || [];
       const newRecords: KilatanEvent[] = [];
       for (const r of yearRecords) {
-        const bulan = EVENT_MONTH_MAP[r.event] || 1;
+        const bulan = KILATAN_EVENT_MONTH[r.event] || 1;
         const ym = `${r.tahun}-${String(bulan).padStart(2, '0')}`;
         if (ym >= periodeMulai && r.total_dibayar === 0) {
           const newNominal = await getNominal(r.tahun, r.event);

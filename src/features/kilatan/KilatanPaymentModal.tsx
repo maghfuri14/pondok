@@ -1,3 +1,4 @@
+import { storage } from '../../lib/storage';
 import { todayLocal } from '../../lib/core';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -96,7 +97,7 @@ export const KilatanPaymentModal: React.FC<KilatanPaymentModalProps> = ({
     }
   }, [isOpen]);
 
-  // Muat opsi iuran tambahan dari service (ganti akses localStorage langsung)
+  // Muat opsi iuran tambahan dari service (ganti akses storage langsung)
   useEffect(() => {
     if (isOpen) {
       iuranPembayaranService

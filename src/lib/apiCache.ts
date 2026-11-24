@@ -1,9 +1,10 @@
+import { storage } from './storage';
 import { apiRequest } from './apiClient';
 
 type Row = Record<string, any>;
 
 const simpan = (key: string, value: unknown): void => {
-  localStorage.setItem(key, JSON.stringify(value));
+  storage.setItem(key, JSON.stringify(value));
 };
 
 function sebagaiArray(value: unknown): Row[] {
@@ -75,7 +76,7 @@ function mapKas(row: Row): Row {
 }
 
 /**
- * Tarik data dari API lalu tulis ke key localStorage yang sama seperti mode lokal.
+ * Tarik data dari API lalu tulis ke key storage yang sama seperti mode lokal.
  * Dengan begitu semua service pembaca (laporan, dashboard, kop surat, dll.)
  * tetap bekerja tanpa diubah—hanya jalur tulis yang dibelokkan ke API.
  */

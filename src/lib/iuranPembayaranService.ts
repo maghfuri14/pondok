@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { IuranPembayaran, TipePembayarIuran } from '../types/iuranPembayaran';
 import { MasterIuran } from '../types/pengaturan';
 import { masterIuranService } from './pengaturanService';
@@ -25,7 +26,7 @@ function readAll(): IuranPembayaran[] {
 }
 
 function writeAll(list: IuranPembayaran[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  storage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
 
 export interface CatatPembayaranIuranInput {
@@ -215,7 +216,7 @@ export const iuranPembayaranService = {
   },
 
   /**
-   * Ambil daftar iuran tambahan dari localStorage, difilter sesuai tipe.
+   * Ambil daftar iuran tambahan dari storage, difilter sesuai tipe.
    * Digunakan form pembayaran Syahriyah & Kilatan sebagai opsi preset iuran lain.
    */
   async getIuranTambahan(tipe?: 'Syahriyah' | 'Kilatan' | 'Keduanya'): Promise<IuranTambahanItem[]> {
@@ -231,7 +232,7 @@ export const iuranPembayaranService = {
 
   /** Simpan seluruh daftar iuran tambahan (dipakai menu Pengaturan). */
   async saveIuranTambahan(list: IuranTambahanItem[]): Promise<IuranTambahanItem[]> {
-    localStorage.setItem(IURAN_TAMBAHAN_KEY, JSON.stringify(list));
+    storage.setItem(IURAN_TAMBAHAN_KEY, JSON.stringify(list));
     return list;
   },
 };

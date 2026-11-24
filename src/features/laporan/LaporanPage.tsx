@@ -15,6 +15,7 @@ import {
   Trash2,
   CheckSquare,
   Square,
+  SearchX,
 } from 'lucide-react';
 import {
   laporanService,
@@ -25,10 +26,10 @@ import {
   LaporanKilatanPerSantriRow,
 } from '../../lib/laporanService';
 import { Santri } from '../../types/santri';
-import { KILATAN_EVENTS } from '../../lib/kilatanService';
+import { KILATAN_EVENTS } from '../../lib/constants/kilatan';
 import { Pendaftaran } from '../../types/pendaftaran';
 import { MasterIuran, JenisPeriodeIuran } from '../../types/pengaturan';
-import { formatRupiah, formatSaldo } from '../../lib/formatter';
+import { formatRupiah, formatSaldo, formatTanggalTable } from '../../lib/formatter';
 import { masterIuranService } from '../../lib/pengaturanService';
 import {
   exportToCsv,
@@ -41,6 +42,8 @@ import {
 import { showToast } from '../../components/ui/Toast';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { StatusPill, StatusTone } from '../../components/ui/StatusPill';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { exportFotoDanDataSantri } from '../../lib/exportFotoSantri';
 import { santriService } from '../../lib/santriService';
 import { selectedItems, toggleSelectAll, toggleSelected } from '../../lib/bulkSelection';
@@ -981,31 +984,17 @@ export const LaporanPage: React.FC = () => {
     );
   };
 
-  const jenisBadge = (jenis: string) => {
-    const isMasuk = jenis === 'Pemasukan';
-    return (
-      <span className={`px-2.5 py-0.5 rounded text-[10px] font-semibold capitalize ${
-        isMasuk
-          ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-          : 'bg-rose-100 text-rose-600 border border-rose-200'
-      }`}>
-        {jenis}
-      </span>
-    );
-  };
+  const jenisBadge = (jenis: string) => (
+    <StatusPill tone={jenis === 'Pemasukan' ? 'success' : 'danger'}>{jenis}</StatusPill>
+  );
 
   const statusBadge = (status: string) => {
-    const themes: Record<string, { bg: string; text: string; border: string }> = {
-      Lunas: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-      Sebagian: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-      Belum: { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200' },
+    const tone: Record<string, StatusTone> = {
+      Lunas: 'success',
+      Sebagian: 'warning',
+      Belum: 'neutral',
     };
-    const t = themes[status] || themes.Belum;
-    return (
-      <span className={`px-2.5 py-0.5 rounded text-[10px] font-semibold capitalize ${t.bg} ${t.text} ${t.border}`}>
-        {status}
-      </span>
-    );
+    return <StatusPill tone={tone[status] || 'neutral'}>{status}</StatusPill>;
   };
 
   return (
@@ -1153,61 +1142,70 @@ export const LaporanPage: React.FC = () => {
             <>
               {/* Kartu Ringkasan */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                {summaryCard(
-                  'Total Pemasukan',
-                  `Rp ${keuanganTotalPemasukan.toLocaleString('id-ID')}`,
-                  'emerald'
-                )}
-                {summaryCard(
-                  'Total Pengeluaran',
-                  `Rp ${keuanganTotalPengeluaran.toLocaleString('id-ID')}`,
-                  'rose'
-                )}
-                {summaryCard(
-                  'Saldo Bersih',
-                  `Rp ${keuanganSaldoBersih.toLocaleString('id-ID')}`,
-                  'blue'
-                )}
+                {summaryCard('Total Pemasukan', formatRupiah(keuanganTotalPemasukan), 'emerald')}
+                {summaryCard('Total Pengeluaran', formatRupiah(keuanganTotalPengeluaran), 'rose')}
+                {summaryCard('Saldo Bersih', formatSaldo(keuanganSaldoBersih), 'blue')}
               </div>
 
-              {/* Tabel Transaksi */}
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Tanggal</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kategori</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Keterangan</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Jenis</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase text-right">Nominal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {keuanganRows.map((k, idx) => (
-                    <tr key={`${k.tanggal}-${idx}`}>
-                      <td className="px-4 py-3 text-slate-700">{k.tanggal}</td>
-                      <td className="px-4 py-3 text-slate-700 capitalize">{k.kategori_nama}</td>
-                      <td className="px-4 py-3 text-slate-700">{k.keterangan || '-'}</td>
-                      <td className="px-4 py-3">{jenisBadge(k.jenis)}</td>
-                      <td className={`px-4 py-3 text-slate-700 text-right font-mono ${
-                        k.jenis === 'Pemasukan' ? 'text-emerald-600' : 'text-rose-600'
-                      }`}>
-                        {k.jenis === 'Pemasukan' ? '+' : '−'} Rp {k.nominal.toLocaleString('id-ID')}
+              {keuanganRows.length === 0 ? (
+                <EmptyState
+                  icon={<SearchX className="w-10 h-10" />}
+                  title="Tidak ada transaksi"
+                  description={
+                    normalizedQuery
+                      ? `Tidak ditemukan transaksi yang cocok dengan "${searchQuery.trim()}".`
+                      : 'Belum ada transaksi kas pada periode dan filter yang dipilih.'
+                  }
+                />
+              ) : (
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="w-12 px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">No</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Tanggal</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kategori</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Keterangan</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Jenis</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase text-right">Nominal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {keuanganRows.map((k, idx) => (
+                      <tr key={`${k.tanggal}-${idx}`} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3 text-center text-slate-400 tabular-nums">{idx + 1}</td>
+                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap tabular-nums">{formatTanggalTable(k.tanggal)}</td>
+                        <td className="px-4 py-3 text-slate-700 capitalize">{k.kategori_nama}</td>
+                        <td className="px-4 py-3 text-slate-700">{k.keterangan || '-'}</td>
+                        <td className="px-4 py-3">{jenisBadge(k.jenis)}</td>
+                        <td className={`px-4 py-3 text-right font-mono tabular-nums ${
+                          k.jenis === 'Pemasukan' ? 'text-emerald-600' : 'text-rose-600'
+                        }`}>
+                          {k.jenis === 'Pemasukan' ? '+' : '−'} {formatRupiah(k.nominal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
+                    <tr>
+                      <td colSpan={4} className="px-4 py-3 text-left uppercase">
+                        TOTAL ({keuanganRows.length} Transaksi)
+                      </td>
+                      <td className="px-4 py-3"></td>
+                      <td className="px-4 py-3 text-right font-mono">
+                        <div className="text-[10px] font-semibold text-emerald-700">
+                          Masuk {formatRupiah(keuanganTotalPemasukan)}
+                        </div>
+                        <div className="text-[10px] font-semibold text-rose-600">
+                          Keluar {formatRupiah(keuanganTotalPengeluaran)}
+                        </div>
+                        <div className="mt-0.5 text-xs font-bold text-slate-800">
+                          Saldo {formatSaldo(keuanganSaldoBersih)}
+                        </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
-                  <tr>
-                    <td colSpan={3} className="px-4 py-3 text-left uppercase">
-                      TOTAL ({keuanganRows.length} Transaksi)
-                    </td>
-                    <td className="px-4 py-3"></td>
-                    <td className="px-4 py-3 text-right font-mono">
-                      {`Masuk: Rp ${keuanganTotalPemasukan.toLocaleString('id-ID')} | Keluar: Rp ${keuanganTotalPengeluaran.toLocaleString('id-ID')}`}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              )}
             </>
           ) : null}
         </div>
@@ -1334,7 +1332,7 @@ export const LaporanPage: React.FC = () => {
                     <td className="px-4 py-3 text-slate-700 capitalize">{statusBadge(s.status)}</td>
                     <td className="px-4 py-3 text-slate-700">{s.nama_wali || '-'}</td>
                     <td className="px-4 py-3 text-slate-700 font-mono">{s.no_hp_wali || s.no_hp_santri || '-'}</td>
-                    <td className="px-4 py-3 text-slate-700">{s.tanggal_masuk || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{formatTanggalTable(s.tanggal_masuk)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1374,7 +1372,7 @@ export const LaporanPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {pendaftaranRows.map((p) => (
                 <tr key={p.id}>
-                  <td className="px-4 py-3 text-slate-700">{p.tanggal_pendaftaran}</td>
+                  <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{formatTanggalTable(p.tanggal_pendaftaran)}</td>
                   <td className="px-4 py-3 text-slate-700">{p.nama_calon}</td>
                   <td className="px-4 py-3 text-slate-700">{p.nama_wali || '-'}</td>
                   <td className="px-4 py-3 text-slate-700 font-mono">{p.no_hp_santri || p.no_hp_wali || '-'}</td>

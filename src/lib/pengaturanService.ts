@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { ProfilPondok, TarifDefault, ArsipTarif, UserAccount, MasterIuran } from '../types/pengaturan';
 import { SEED_DEMO_DATA, DataRusakError, readJsonStrict } from './core';
 
@@ -185,7 +186,7 @@ export const pengaturanService = {
   },
 
   async saveProfil(profil: ProfilPondok): Promise<void> {
-    localStorage.setItem(KEY_PROFIL, JSON.stringify(profil));
+    storage.setItem(KEY_PROFIL, JSON.stringify(profil));
   },
 
   // TARIF AKTIF
@@ -200,7 +201,7 @@ export const pengaturanService = {
   },
 
   async saveTarif(tarif: TarifDefault): Promise<void> {
-    localStorage.setItem(KEY_TARIF, JSON.stringify(tarif));
+    storage.setItem(KEY_TARIF, JSON.stringify(tarif));
   },
 
   // ARSIP RIWAYAT TARIF
@@ -224,26 +225,26 @@ export const pengaturanService = {
   },
 
   async saveArsipTarif(list: ArsipTarif[]): Promise<void> {
-    localStorage.setItem(KEY_ARSIP_TARIF, JSON.stringify(list));
+    storage.setItem(KEY_ARSIP_TARIF, JSON.stringify(list));
   },
 
   // MANAJEMEN PENGGUNA
   async getUsers(): Promise<UserAccount[]> {
-    const raw = localStorage.getItem(KEY_USERS);
+    const raw = storage.getItem(KEY_USERS);
     if (raw === null) {
       // Akun demo dengan password sementara hanya dibuat di mode development.
       // Build produksi memulai tanpa akun dan meminta pembuatan Super Admin
       // pertama lewat halaman login.
       if (!SEED_DEMO_DATA) return [];
       const seed = DEFAULT_USERS.map((u) => ({ ...u }));
-      localStorage.setItem(KEY_USERS, JSON.stringify(seed));
+      storage.setItem(KEY_USERS, JSON.stringify(seed));
       return seed;
     }
     return readJsonStrict<UserAccount[]>(KEY_USERS, []);
   },
 
   async saveUsers(users: UserAccount[]): Promise<void> {
-    localStorage.setItem(KEY_USERS, JSON.stringify(users));
+    storage.setItem(KEY_USERS, JSON.stringify(users));
   },
 
   async addUser(user: Omit<UserAccount, 'id'>): Promise<UserAccount> {
@@ -317,10 +318,10 @@ export const DEFAULT_MASTER_IURAN: MasterIuran[] = [
 ];
 
 function readMasterIuran(): MasterIuran[] {
-  const raw = localStorage.getItem(KEY_MASTER_IURAN);
+  const raw = storage.getItem(KEY_MASTER_IURAN);
   if (raw === null) {
     const seed = DEFAULT_MASTER_IURAN.map((x) => ({ ...x }));
-    localStorage.setItem(KEY_MASTER_IURAN, JSON.stringify(seed));
+    storage.setItem(KEY_MASTER_IURAN, JSON.stringify(seed));
     return seed;
   }
   return readJsonStrict<MasterIuran[]>(KEY_MASTER_IURAN, []);
@@ -336,7 +337,7 @@ export const masterIuranService = {
   },
 
   async saveAll(list: MasterIuran[]): Promise<void> {
-    localStorage.setItem(KEY_MASTER_IURAN, JSON.stringify(list));
+    storage.setItem(KEY_MASTER_IURAN, JSON.stringify(list));
   },
 
   async create(
@@ -349,7 +350,7 @@ export const masterIuranService = {
       created_at: new Date().toISOString(),
     };
     list.unshift(item);
-    await localStorage.setItem(KEY_MASTER_IURAN, JSON.stringify(list));
+    await storage.setItem(KEY_MASTER_IURAN, JSON.stringify(list));
     return item;
   },
 
@@ -364,7 +365,7 @@ export const masterIuranService = {
       created_at: list[idx].created_at,
       updated_at: new Date().toISOString(),
     };
-    await localStorage.setItem(KEY_MASTER_IURAN, JSON.stringify(list));
+    await storage.setItem(KEY_MASTER_IURAN, JSON.stringify(list));
     return list[idx];
   },
 
@@ -372,7 +373,7 @@ export const masterIuranService = {
     const list = await readMasterIuran();
     const next = list.filter((i) => i.id !== id);
     if (next.length === list.length) return false;
-    await localStorage.setItem(KEY_MASTER_IURAN, JSON.stringify(next));
+    await storage.setItem(KEY_MASTER_IURAN, JSON.stringify(next));
     return true;
   },
 };

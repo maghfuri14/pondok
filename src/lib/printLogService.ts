@@ -1,3 +1,4 @@
+import { storage } from './storage';
 import { readJsonStrict } from './core';
 
 export type PrintType = 'HVS' | 'Thermal' | 'PDF';
@@ -84,7 +85,7 @@ export const printLogService = {
     }
     all[transaksiId].push(newEntry);
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    storage.setItem(STORAGE_KEY, JSON.stringify(all));
     notifyListeners();
     return newEntry;
   },
@@ -93,9 +94,9 @@ export const printLogService = {
     if (transaksiId) {
       const all = this.getAllLogs();
       delete all[transaksiId];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+      storage.setItem(STORAGE_KEY, JSON.stringify(all));
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      storage.removeItem(STORAGE_KEY);
     }
     notifyListeners();
   },

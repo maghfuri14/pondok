@@ -22,6 +22,24 @@ export function formatSaldo(angka: number): string {
   return formatIdr(angka);
 }
 
+const BULAN_SINGKAT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
+];
+
+/**
+ * Format tanggal untuk data table: dd-mmm-yyyy (mis. 24-Nov-2026).
+ * Parsing dari string YYYY-MM-DD agar tidak bergeser zona waktu.
+ */
+export function formatTanggalTable(tanggal?: string | null): string {
+  if (!tanggal) return '-';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(tanggal);
+  if (!m) return tanggal;
+  const [, tahun, bulanAngka, hari] = m;
+  const bulan = BULAN_SINGKAT[Number(bulanAngka) - 1];
+  return bulan ? `${hari}-${bulan}-${tahun}` : tanggal;
+}
+
 export function formatThousand(val: number | string): string {
   if (val === '' || val === null || val === undefined) return '';
   const numStr = val.toString().replace(/\D/g, '');

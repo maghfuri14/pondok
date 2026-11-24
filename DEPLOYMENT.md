@@ -42,10 +42,16 @@ Contoh `.env.production` (dipakai Vite saat `npm run build`):
 
 ```ini
 VITE_API_MODE=api
-VITE_API_URL=https://pondok.example.com/api
+# Kosong = same-origin (API di /api lewat reverse proxy). Atau isi origin saja:
+VITE_API_URL=
+# VITE_API_URL=https://pondok.example.com
 ```
 
 > `VITE_*` tertanam di bundle saat build. Ubah `.env.production` **sebelum** build, lalu build ulang.
+>
+> **Jangan** mengisi `VITE_API_URL` dengan `https://.../api`. Setiap `apiRequest` sudah
+> memakai path `/api/...`, jadi akhirnya akan menjadi `/api/api/...`. Isi origin saja
+> atau kosongkan untuk same-origin.
 
 ## 3. Database
 
@@ -111,7 +117,9 @@ Service worker hanya mendaftar saat `import.meta.env.PROD` — pastikan aplikasi
 
 ## 6. Checklist keamanan
 
+- [ ] Semua perubahan sudah di-commit & di-push ke `origin` (commit terakhir sudah bersih)
 - [ ] `SESSION_SECRET` diganti dari nilai development (minimal 32 byte acak)
+- [ ] `VITE_API_URL` tidak mengandung `/api` dan tidak pointing ke `localhost`
 - [ ] `NODE_ENV=production` (cookie `Secure` aktif, error detail tidak bocor)
 - [ ] `CORS_ORIGIN` tepat satu origin frontend (bukan `*`)
 - [ ] DB hanya bisa diakses localhost / private network

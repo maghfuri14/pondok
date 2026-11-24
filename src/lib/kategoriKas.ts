@@ -1,7 +1,8 @@
+import { storage } from './storage';
 import { KATEGORI_PEMASUKAN, KATEGORI_PENGELUARAN } from './constants';
 import { readJsonStrict } from './core';
 
-/** Key localStorage yang dikelola dari menu Pengaturan > Kategori Kas. */
+/** Key storage yang dikelola dari menu Pengaturan > Kategori Kas. */
 export const KATEGORI_KAS_STORAGE_KEY = 'al_hidayah_kategori_kas';
 
 export interface KategoriKasConfig {
@@ -57,7 +58,7 @@ export function getKategoriKas(): KategoriKasConfig {
 }
 
 export function saveKategoriKas(config: KategoriKasConfig): void {
-  localStorage.setItem(
+  storage.setItem(
     KATEGORI_KAS_STORAGE_KEY,
     JSON.stringify({
       pemasukan: normalizeList(config.pemasukan, DEFAULT_KATEGORI_KAS.pemasukan),

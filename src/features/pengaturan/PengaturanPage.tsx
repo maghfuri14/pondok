@@ -1,3 +1,4 @@
+import { storage } from '../../lib/storage';
 import { todayLocal, currentYmLocal, nextYm } from '../../lib/core';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -201,9 +202,9 @@ export const PengaturanPage: React.FC = () => {
   // TAB 4: Iuran Tambahan State
   const [iuranList, setIuranList] = useState<IuranTambahanItem[]>(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_IURAN);
+      const raw = storage.getItem(STORAGE_KEY_IURAN);
       if (!raw) {
-        localStorage.setItem(STORAGE_KEY_IURAN, JSON.stringify(DEFAULT_IURAN));
+        storage.setItem(STORAGE_KEY_IURAN, JSON.stringify(DEFAULT_IURAN));
         return DEFAULT_IURAN;
       }
       return JSON.parse(raw);
@@ -788,7 +789,7 @@ export const PengaturanPage: React.FC = () => {
     setKategoriKas(updatedConfig);
     saveKategoriKas(updatedConfig);
 
-    // Sinkronkan nama kategori di riwayat transaksi kas (lewat service, bukan localStorage langsung)
+    // Sinkronkan nama kategori di riwayat transaksi kas (lewat service, bukan storage langsung)
     try {
       await kasService.renameKasKategori(editKatType, editKatOldName, trimmedNew);
     } catch (err) {
