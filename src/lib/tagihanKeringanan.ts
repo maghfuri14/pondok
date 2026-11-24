@@ -9,8 +9,6 @@ export interface WaiverRingkas {
   tahun: number;
   bulan_mulai: number;
   bulan_selesai: number;
-  /** Tahun akhir — bisa lintas tahun ke depan; default = tahun. */
-  tahun_selesai?: number;
   nominal_per_bulan: number;
   jenis?: JenisKeringanan;
   snapshot?: Record<string, number>;
@@ -48,22 +46,19 @@ export function hitungTagihan(args: {
   const { tarifDasar, waivers, santriId, tahun, bulan, sudahDibayar } = args;
   const tarif = Math.max(0, Number(tarifDasar) || 0);
 
-  // abs = tahun * 12 + (bulan - 1) — bulan mutlak dalam tahun tersebut.
-  const abs = tahun * 12 + (bulan - 1);
-  const w = waivers.find((item) => {
-    if (santriId && item.santri_id !== santriId) return false;
-    const startAbs = Number(item.tahun) * 12 + (Number(item.bulan_mulai) - 1);
-    const endAbs =
-      (Number(item.tahun_selesai ?? item.tahun)) * 12 + (Number(item.bulan_selesai) - 1);
-    return abs >= startAbs && abs <= endAbs;
-  });
+  const w = waivers.find(
+    (item) =>
+      (!santriId || item.santri_id === santriId) &&
+      Number(item.tahun) === tahun &&
+      bulan >= Number(item.bulan_mulai) &&
+      bulan <= Number(item.bulan_selesai)
+  );
 
   let jenis: JenisKeringanan | null = null;
   let potongan = 0;
 
   if (w) {
-    // Coba snapshot abs (baru) lalu fallback key lama (String(bulan)).
-    const asli = Number(w.snapshot?.[String(abs)] ?? w.snapshot?.[String(bulan)] ?? tarif);
+    const asli = Number(w.snapshot?.[String(bulan)] ?? tarif);
     const pot = Number(w.nominal_per_bulan || 0);
 
     if (w.jenis === 'penuh') jenis = 'penuh';

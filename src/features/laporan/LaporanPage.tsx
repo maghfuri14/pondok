@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Download,
+  Search,
   Wallet,
   Users,
   UserPlus,
@@ -10,6 +11,10 @@ import {
   X,
   HandCoins,
   CalendarDays,
+  Images,
+  Trash2,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import {
   laporanService,
@@ -17,8 +22,10 @@ import {
   LaporanSyahriyahRow,
   LaporanIuranRow,
   LaporanKilatanRow,
+  LaporanKilatanPerSantriRow,
 } from '../../lib/laporanService';
 import { Santri } from '../../types/santri';
+import { KILATAN_EVENTS } from '../../lib/kilatanService';
 import { Pendaftaran } from '../../types/pendaftaran';
 import { MasterIuran, JenisPeriodeIuran } from '../../types/pengaturan';
 import { formatRupiah, formatSaldo } from '../../lib/formatter';
@@ -32,6 +39,12 @@ import {
   ExportLaporanPdfParams,
 } from '../../lib/exportHelper';
 import { showToast } from '../../components/ui/Toast';
+import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { exportFotoDanDataSantri } from '../../lib/exportFotoSantri';
+import { santriService } from '../../lib/santriService';
+import { selectedItems, toggleSelectAll, toggleSelected } from '../../lib/bulkSelection';
+import { authStore, AuthUser } from '../../store/authStore';
 
 type TabType = 'keuangan' | 'santri' | 'pendaftaran' | 'syahriyah' | 'iuran' | 'kilatan';
 
@@ -58,24 +71,28 @@ const labelPeriodeIuran = (j: JenisPeriodeIuran): string => {
 };
 
 const SELECT_CLASS =
-  'block w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none';
-const LABEL_CLASS = 'block text-[11px] font-semibold text-slate-500 mb-1';
+  'block w-auto min-w-[110px] max-w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none';
 
 interface FilterOption {
   value: string;
   label: string;
 }
 
-/** Label + select seragam untuk seluruh filter laporan. */
+/** Select filter laporan tanpa label tampilan (tetap accessible via aria-label). */
 const FilterField: React.FC<{
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: FilterOption[];
 }> = ({ label, value, onChange, options }) => (
-  <div>
-    <label className={LABEL_CLASS}>{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={SELECT_CLASS}>
+  <div className="shrink-0">
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={SELECT_CLASS}
+      aria-label={label}
+      title={label}
+    >
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>
           {opt.label}
@@ -136,6 +153,7 @@ export const LaporanPage: React.FC = () => {
   const [statusPendaftaran, setStatusPendaftaran] = useState<string>('Semua');
   const [filterIuran, setFilterIuran] = useState<string>('Semua');
   const [masterIuranList, setMasterIuranList] = useState<MasterIuran[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Data States
   const [isLoading, setIsLoading] = useState(true);
@@ -145,11 +163,23 @@ export const LaporanPage: React.FC = () => {
   const [syahriyahData, setSyahriyahData] = useState<LaporanSyahriyahRow[]>([]);
   const [iuranData, setIuranData] = useState<LaporanIuranRow[]>([]);
   const [kilatanData, setKilatanData] = useState<LaporanKilatanRow[]>([]);
+  const [kilatanPerSantriData, setKilatanPerSantriData] = useState<LaporanKilatanPerSantriRow[]>([]);
 
   // Print & PDF Preview Modal States
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [previewParams, setPreviewParams] = useState<ExportLaporanPdfParams | null>(null);
+
+  // Bulk action — tab Data Santri
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const isPemilik = user?.role === 'pemilik';
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [hapusConfirmOpen, setHapusConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    authStore.getUser().then(setUser);
+  }, []);
 
   const loadActiveTabData = async () => {
     setIsLoading(true);
@@ -171,8 +201,12 @@ export const LaporanPage: React.FC = () => {
         setIuranData(res);
         setMasterIuranList(await masterIuranService.getAktif());
       } else if (activeTab === 'kilatan') {
-        const res = await laporanService.getLaporanKilatan(tahun);
+        const [res, detail] = await Promise.all([
+          laporanService.getLaporanKilatan(tahun),
+          laporanService.getRekapKilatanPerSantri(tahun),
+        ]);
         setKilatanData(res);
+        setKilatanPerSantriData(detail);
       }
     } finally {
       setIsLoading(false);
@@ -191,6 +225,72 @@ export const LaporanPage: React.FC = () => {
     setStatusSantri('Semua');
     setStatusPendaftaran('Semua');
     setFilterIuran('Semua');
+    setSearchQuery('');
+  };
+
+  // --- Pencarian (search) untuk data tab laporan ---
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const matchesQuery = (...values: Array<string | number | undefined | null>) =>
+    !normalizedQuery || values.some((v) => String(v ?? '').toLowerCase().includes(normalizedQuery));
+
+  const keuanganRows = (keuanganData?.list ?? []).filter((k) =>
+    matchesQuery(k.tanggal, k.kategori_nama, k.keterangan, k.jenis, k.nominal)
+  );
+  const keuanganTotalPemasukan = keuanganRows
+    .filter((k) => k.jenis === 'Pemasukan')
+    .reduce((s, k) => s + k.nominal, 0);
+  const keuanganTotalPengeluaran = keuanganRows
+    .filter((k) => k.jenis === 'Pengeluaran')
+    .reduce((s, k) => s + k.nominal, 0);
+  const keuanganSaldoBersih = keuanganTotalPemasukan - keuanganTotalPengeluaran;
+
+  const santriRows = santriData.filter((s) =>
+    matchesQuery(s.nama, s.nis, s.nama_wali, s.no_hp_santri, s.no_hp_wali)
+  );
+
+  // Pilihan bulk selalu mengikuti data yang sedang terlihat.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeTab, kategoriSantri, statusSantri, searchQuery]);
+
+  const selectedSantri = selectedItems(santriRows, selectedIds);
+  const semuaSantriTerpilih =
+    santriRows.length > 0 && santriRows.every((s) => selectedIds.includes(s.id));
+
+  const pendaftaranRows = pendaftaranData.filter((p) =>
+    matchesQuery(p.nama_calon, p.nama_wali, p.no_hp_santri, p.no_hp_wali)
+  );
+  const syahriyahRows = syahriyahData.filter((r) => matchesQuery(r.nama, r.nis));
+  const iuranRows = iuranData.filter((r) => matchesQuery(r.iuranNama, r.iuranId));
+  const kilatanPerSantriRows = kilatanPerSantriData.filter((r) =>
+    matchesQuery(r.nis, r.nama, r.kategori)
+  );
+
+  /** Baris Excel/CSV untuk daftar santri tertentu (dipakai ekspor biasa & bulk). */
+  const bangunBarisExportSantri = (daftar: Santri[]): Record<string, any>[] => {
+    if (!daftar.length) return [];
+    const data: Record<string, any>[] = daftar.map((s) => ({
+      NIS: s.nis,
+      'Nama Santri': s.nama,
+      Kategori: s.kategori,
+      Status: s.status,
+      'Nama Wali': s.nama_wali,
+      'No HP Santri': s.no_hp_santri,
+      'No HP Wali': s.no_hp_wali,
+      'Tanggal Masuk': s.tanggal_masuk || '-',
+    }));
+
+    data.push({
+      NIS: 'TOTAL SANTRI',
+      'Nama Santri': `${daftar.length} Santri`,
+      Kategori: '',
+      Status: `${daftar.filter((s) => s.status === 'Aktif').length} Aktif`,
+      'Nama Wali': '',
+      'No HP Santri': '',
+      'No HP Wali': '',
+      'Tanggal Masuk': '',
+    });
+    return data;
   };
 
   // Helper to generate payload (including TOTAL summary row) for exports
@@ -223,34 +323,11 @@ export const LaporanPage: React.FC = () => {
     }
 
     if (activeTab === 'santri') {
-      const filenameBase = `Data-Santri-${tahun}`;
-      if (santriData.length === 0) {
-        return { filenameBase, data: [], sheetName: 'Data Santri' };
-      }
-
-      const data: Record<string, any>[] = santriData.map((s) => ({
-        NIS: s.nis,
-        'Nama Santri': s.nama,
-        Kategori: s.kategori,
-        Status: s.status,
-        'Nama Wali': s.nama_wali,
-        'No HP Santri': s.no_hp_santri,
-        'No HP Wali': s.no_hp_wali,
-        'Tanggal Masuk': s.tanggal_masuk || '-',
-      }));
-
-      data.push({
-        NIS: 'TOTAL SANTRI',
-        'Nama Santri': `${santriData.length} Santri`,
-        Kategori: '',
-        Status: `${santriData.filter((s) => s.status === 'Aktif').length} Aktif`,
-        'Nama Wali': '',
-        'No HP Santri': '',
-        'No HP Wali': '',
-        'Tanggal Masuk': '',
-      });
-
-      return { filenameBase, data, sheetName: 'Data Santri' };
+      return {
+        filenameBase: `Data-Santri-${tahun}`,
+        data: bangunBarisExportSantri(santriData),
+        sheetName: 'Data Santri',
+      };
     }
 
     if (activeTab === 'pendaftaran') {
@@ -379,6 +456,135 @@ export const LaporanPage: React.FC = () => {
     exportToExcel(`${filenameBase}.xlsx`, data, sheetName);
   };
 
+  // --- Bulk action (hanya untuk baris terpilih di tab Data Santri) ---
+  const butuhPilihan = (): boolean => {
+    if (selectedSantri.length === 0) {
+      showToast('Pilih minimal satu santri terlebih dahulu', 'error');
+      return false;
+    }
+    return true;
+  };
+
+  const handleBulkExportFoto = () => {
+    if (!butuhPilihan()) return;
+    exportFotoDanDataSantri(selectedSantri, `Data-Santri-Terpilih-${tahun}`);
+  };
+
+  const handleBulkExportExcel = () => {
+    if (!butuhPilihan()) return;
+    exportToExcel(
+      `Data-Santri-Terpilih-${tahun}.xlsx`,
+      bangunBarisExportSantri(selectedSantri),
+      'Data Santri'
+    );
+  };
+
+  const handleBulkExportCsv = () => {
+    if (!butuhPilihan()) return;
+    exportToCsv(
+      `Data-Santri-Terpilih-${tahun}.csv`,
+      bangunBarisExportSantri(selectedSantri)
+    );
+  };
+
+  const handleBulkExportPdf = () => {
+    if (!butuhPilihan()) return;
+    const params = getSantriPdfParams(selectedSantri);
+    if (params) exportLaporanToPdf(params);
+  };
+
+  const handleHapusTerpilih = async () => {
+    if (!selectedSantri.length || isDeleting) return;
+    setIsDeleting(true);
+    let berhasil = 0;
+    let gagal = 0;
+
+    try {
+      for (const santri of selectedSantri) {
+        try {
+          await santriService.deleteSantri(santri.id);
+          berhasil += 1;
+        } catch {
+          gagal += 1; // mis. santri punya riwayat pembayaran → tidak boleh dihapus
+        }
+      }
+
+      if (berhasil > 0) {
+        showToast(
+          `${berhasil} santri dihapus${gagal ? `, ${gagal} gagal (mempunyai riwayat pembayaran)` : ''}`,
+          gagal ? 'info' : 'success'
+        );
+        setSelectedIds([]);
+        await loadActiveTabData();
+      } else {
+        showToast('Tidak ada santri yang bisa dihapus. Santri dengan riwayat pembayaran tidak dapat dihapus.', 'error');
+      }
+    } finally {
+      setIsDeleting(false);
+      setHapusConfirmOpen(false);
+    }
+  };
+
+  /** Parameter PDF master data santri (dipakai ekspor biasa & bulk). */
+  const getSantriPdfParams = (daftar: Santri[]): ExportLaporanPdfParams | null => {
+    if (!daftar.length) {
+      showToast('Tidak ada data santri untuk diekspor', 'error');
+      return null;
+    }
+
+    const aktifCount = daftar.filter((s) => s.status === 'Aktif').length;
+    const nonaktifCount = daftar.length - aktifCount;
+
+    return {
+      title: 'Laporan Master Data Santri',
+      subtitle: `Tahun Akademik: ${tahun}`,
+      filename: `Data-Santri-${tahun}`,
+      orientation: 'landscape',
+      filterInfo: [
+        { label: 'Kategori', value: kategoriSantri },
+        { label: 'Status', value: statusSantri },
+      ],
+      summaryMetrics: [
+        { label: 'TOTAL SANTRI', value: `${daftar.length} Santri` },
+        { label: 'SANTRI AKTIF', value: `${aktifCount} Santri` },
+        { label: 'SANTRI TIDAK AKTIF', value: `${nonaktifCount} Santri` },
+      ],
+      headers: ['No', 'NIS', 'Nama Santri', 'Kategori', 'Status', 'Nama Wali', 'No HP Wali', 'Tanggal Masuk'],
+      rows: daftar.map((s, idx) => [
+        idx + 1,
+        s.nis,
+        s.nama,
+        s.kategori,
+        s.status,
+        s.nama_wali || '-',
+        s.no_hp_wali || s.no_hp_santri || '-',
+        s.tanggal_masuk || '-',
+      ]),
+      footers: [
+        [
+          '',
+          '',
+          `TOTAL: ${daftar.length} Santri`,
+          '',
+          `${aktifCount} Aktif / ${nonaktifCount} Nonaktif`,
+          '',
+          '',
+          '',
+        ],
+      ],
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 24, halign: 'center' },
+        2: { cellWidth: 50 },
+        3: { cellWidth: 24, halign: 'center' },
+        4: { cellWidth: 24, halign: 'center' },
+        5: { cellWidth: 45 },
+        6: { cellWidth: 35, halign: 'center' },
+        7: { cellWidth: 30, halign: 'center' },
+      },
+    };
+  };
+
   const getCurrentPdfParams = (): ExportLaporanPdfParams | null => {
     const bulanLabel = BULAN_OPTIONS.find((b) => b.value === bulan)?.label || bulan;
 
@@ -435,62 +641,7 @@ export const LaporanPage: React.FC = () => {
     }
 
     if (activeTab === 'santri') {
-      if (santriData.length === 0) {
-        showToast('Tidak ada data santri untuk diekspor', 'error');
-        return null;
-      }
-
-      const aktifCount = santriData.filter((s) => s.status === 'Aktif').length;
-      const nonaktifCount = santriData.length - aktifCount;
-
-      return {
-        title: 'Laporan Master Data Santri',
-        subtitle: `Tahun Akademik: ${tahun}`,
-        filename: `Data-Santri-${tahun}`,
-        orientation: 'landscape',
-        filterInfo: [
-          { label: 'Kategori', value: kategoriSantri },
-          { label: 'Status', value: statusSantri },
-        ],
-        summaryMetrics: [
-          { label: 'TOTAL SANTRI', value: `${santriData.length} Santri` },
-          { label: 'SANTRI AKTIF', value: `${aktifCount} Santri` },
-          { label: 'SANTRI TIDAK AKTIF', value: `${nonaktifCount} Santri` },
-        ],
-        headers: ['No', 'NIS', 'Nama Santri', 'Kategori', 'Status', 'Nama Wali', 'No HP Wali', 'Tanggal Masuk'],
-        rows: santriData.map((s, idx) => [
-          idx + 1,
-          s.nis,
-          s.nama,
-          s.kategori,
-          s.status,
-          s.nama_wali || '-',
-          s.no_hp_wali || s.no_hp_santri || '-',
-          s.tanggal_masuk || '-',
-        ]),
-        footers: [
-          [
-            '',
-            '',
-            `TOTAL: ${santriData.length} Santri`,
-            '',
-            `${aktifCount} Aktif / ${nonaktifCount} Nonaktif`,
-            '',
-            '',
-            '',
-          ],
-        ],
-        columnStyles: {
-          0: { cellWidth: 10, halign: 'center' },
-          1: { cellWidth: 24, halign: 'center' },
-          2: { cellWidth: 50 },
-          3: { cellWidth: 24, halign: 'center' },
-          4: { cellWidth: 24, halign: 'center' },
-          5: { cellWidth: 45 },
-          6: { cellWidth: 35, halign: 'center' },
-          7: { cellWidth: 30, halign: 'center' },
-        },
-      };
+      return getSantriPdfParams(santriData);
     }
 
     if (activeTab === 'pendaftaran') {
@@ -883,15 +1034,29 @@ export const LaporanPage: React.FC = () => {
       </div>
 
       {/* Area Filter Responsive (Card Putih) */}
-      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Pencarian — paling besar & paling kiri */}
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari data..."
+              aria-label="Cari data laporan"
+              className="block w-full h-10 rounded border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+            />
+          </div>
+
           {/* Tahun Filter (All Tabs) */}
-          <div>
-            <label className={LABEL_CLASS}>Tahun</label>
+          <div className="shrink-0">
             <select
               value={tahun}
               onChange={(e) => setTahun(Number(e.target.value))}
               className={SELECT_CLASS}
+              aria-label="Tahun"
+              title="Tahun"
             >
               {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
                 <option key={y} value={y}>
@@ -963,15 +1128,13 @@ export const LaporanPage: React.FC = () => {
             />
           )}
 
-          {/* Reset — satu tombol untuk semua tab */}
-          <div className="flex items-end">
-            <button
-              onClick={handleResetFilter}
-              className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
-            >
-              Reset
-            </button>
-          </div>
+          {/* Reset */}
+          <button
+            onClick={handleResetFilter}
+            className="h-10 px-3 text-xs text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors shrink-0"
+          >
+            Reset
+          </button>
         </div>
       </div>
 
@@ -992,17 +1155,17 @@ export const LaporanPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {summaryCard(
                   'Total Pemasukan',
-                  `Rp ${keuanganData.totalPemasukan.toLocaleString('id-ID')}`,
+                  `Rp ${keuanganTotalPemasukan.toLocaleString('id-ID')}`,
                   'emerald'
                 )}
                 {summaryCard(
                   'Total Pengeluaran',
-                  `Rp ${keuanganData.totalPengeluaran.toLocaleString('id-ID')}`,
+                  `Rp ${keuanganTotalPengeluaran.toLocaleString('id-ID')}`,
                   'rose'
                 )}
                 {summaryCard(
                   'Saldo Bersih',
-                  `Rp ${keuanganData.saldoBersih.toLocaleString('id-ID')}`,
+                  `Rp ${keuanganSaldoBersih.toLocaleString('id-ID')}`,
                   'blue'
                 )}
               </div>
@@ -1019,7 +1182,7 @@ export const LaporanPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {keuanganData.list.map((k, idx) => (
+                  {keuanganRows.map((k, idx) => (
                     <tr key={`${k.tanggal}-${idx}`}>
                       <td className="px-4 py-3 text-slate-700">{k.tanggal}</td>
                       <td className="px-4 py-3 text-slate-700 capitalize">{k.kategori_nama}</td>
@@ -1036,11 +1199,11 @@ export const LaporanPage: React.FC = () => {
                 <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
                   <tr>
                     <td colSpan={3} className="px-4 py-3 text-left uppercase">
-                      TOTAL ({keuanganData.list.length} Transaksi)
+                      TOTAL ({keuanganRows.length} Transaksi)
                     </td>
                     <td className="px-4 py-3"></td>
                     <td className="px-4 py-3 text-right font-mono">
-                      {`Masuk: Rp ${keuanganData.totalPemasukan.toLocaleString('id-ID')} | Keluar: Rp ${keuanganData.totalPengeluaran.toLocaleString('id-ID')}`}
+                      {`Masuk: Rp ${keuanganTotalPemasukan.toLocaleString('id-ID')} | Keluar: Rp ${keuanganTotalPengeluaran.toLocaleString('id-ID')}`}
                     </td>
                   </tr>
                 </tfoot>
@@ -1051,66 +1214,146 @@ export const LaporanPage: React.FC = () => {
       )}
 
       {activeTab === 'santri' && (
-        <div className="overflow-x-auto">
-          {sectionBar()}
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-3 py-3 text-xs font-semibold text-slate-500 uppercase">Foto</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">NIS</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nama Santri</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kategori</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nama Wali</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">No HP Wali</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Tgl Masuk</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {santriData.map((s) => (
-                <tr key={s.id}>
-                  <td className="px-3 py-2">
-                    {s.foto ? (
-                      <img
-                        src={s.foto}
-                        alt={`Foto ${s.nama}`}
-                        className="mx-auto h-10 w-10 rounded-full border border-slate-200 object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div
-                        aria-label={`Inisial ${s.nama}`}
-                        className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700"
-                      >
-                        {s.nama.trim().substring(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700 font-mono">{s.nis}</td>
-                  <td className="px-4 py-3 text-slate-700">{s.nama}</td>
-                  <td className="px-4 py-3 text-slate-700 capitalize">{s.kategori}</td>
-                  <td className="px-4 py-3 text-slate-700 capitalize">{statusBadge(s.status)}</td>
-                  <td className="px-4 py-3 text-slate-700">{s.nama_wali || '-'}</td>
-                  <td className="px-4 py-3 text-slate-700 font-mono">{s.no_hp_wali || s.no_hp_santri || '-'}</td>
-                  <td className="px-4 py-3 text-slate-700">{s.tanggal_masuk || '-'}</td>
+        <div>
+          {/* Bulk action bar — menggantikan bar export lama pada tab ini */}
+          <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={semuaSantriTerpilih ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                  onClick={() =>
+                    setSelectedIds(toggleSelectAll(selectedIds, santriRows.map((s) => s.id)))
+                  }
+                  disabled={santriRows.length === 0}
+                >
+                  {semuaSantriTerpilih ? 'Batalkan Semua' : 'Pilih Semua'}
+                </Button>
+                <span className={`text-xs font-medium ${selectedSantri.length ? 'text-emerald-700' : 'text-slate-500'}`}>
+                  {selectedSantri.length
+                    ? `${selectedSantri.length} santri dipilih`
+                    : 'Belum ada santri dipilih'}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="hidden text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:inline">
+                  Ekspor
+                </span>
+                <Button variant="secondary" size="sm" leftIcon={<Images className="w-3.5 h-3.5" />} onClick={handleBulkExportFoto} disabled={!selectedSantri.length}>
+                  Foto + Data
+                </Button>
+                <Button variant="secondary" size="sm" leftIcon={<FileText className="w-3.5 h-3.5" />} onClick={handleBulkExportExcel} disabled={!selectedSantri.length}>
+                  Excel
+                </Button>
+                <Button variant="secondary" size="sm" leftIcon={<Download className="w-3.5 h-3.5" />} onClick={handleBulkExportCsv} disabled={!selectedSantri.length}>
+                  CSV
+                </Button>
+                <Button variant="secondary" size="sm" leftIcon={<Download className="w-3.5 h-3.5" />} onClick={handleBulkExportPdf} disabled={!selectedSantri.length}>
+                  PDF
+                </Button>
+
+                {!isPemilik && (
+                  <>
+                    <span className="mx-0.5 hidden h-5 w-px bg-slate-200 sm:block" />
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                      onClick={() => setHapusConfirmOpen(true)}
+                      disabled={!selectedSantri.length || isDeleting}
+                      isLoading={isDeleting}
+                    >
+                      Hapus Terpilih
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="w-10 px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={semuaSantriTerpilih}
+                      onChange={() =>
+                        setSelectedIds(toggleSelectAll(selectedIds, santriRows.map((s) => s.id)))
+                      }
+                      disabled={santriRows.length === 0}
+                      aria-label="Pilih semua santri"
+                      className="h-4 w-4 cursor-pointer accent-[#059669]"
+                    />
+                  </th>
+                  <th className="px-3 py-3 text-xs font-semibold text-slate-500 uppercase">Foto</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">NIS</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nama Santri</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kategori</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nama Wali</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">No HP Wali</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Tgl Masuk</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
-              <tr>
-                <td colSpan={3} className="px-4 py-3 text-left uppercase">
-                  TOTAL ({santriData.length} Santri)
-                </td>
-                <td className="px-4 py-3"></td>
-                <td className="px-4 py-3 text-right font-mono text-emerald-700">
-                  {santriData.filter((s) => s.status === 'Aktif').length} Aktif
-                </td>
-                <td className="px-4 py-3"></td>
-                <td className="px-4 py-3"></td>
-                <td className="px-4 py-3"></td>
-              </tr>
-            </tfoot>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {santriRows.map((s) => (
+                  <tr key={s.id} className={selectedIds.includes(s.id) ? 'bg-emerald-50/40' : undefined}>
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(s.id)}
+                        onChange={() => setSelectedIds(toggleSelected(selectedIds, s.id))}
+                        aria-label={`Pilih ${s.nama}`}
+                        className="h-4 w-4 cursor-pointer accent-[#059669]"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      {s.foto ? (
+                        <img
+                          src={s.foto}
+                          alt={`Foto ${s.nama}`}
+                          className="mx-auto h-10 w-10 rounded-full border border-slate-200 object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div
+                          aria-label={`Inisial ${s.nama}`}
+                          className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700"
+                        >
+                          {s.nama.trim().substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700 font-mono">{s.nis}</td>
+                    <td className="px-4 py-3 text-slate-700">{s.nama}</td>
+                    <td className="px-4 py-3 text-slate-700 capitalize">{s.kategori}</td>
+                    <td className="px-4 py-3 text-slate-700 capitalize">{statusBadge(s.status)}</td>
+                    <td className="px-4 py-3 text-slate-700">{s.nama_wali || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700 font-mono">{s.no_hp_wali || s.no_hp_santri || '-'}</td>
+                    <td className="px-4 py-3 text-slate-700">{s.tanggal_masuk || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
+                <tr>
+                  <td colSpan={4} className="px-4 py-3 text-left uppercase">
+                    TOTAL ({santriRows.length} Santri)
+                  </td>
+                  <td className="px-4 py-3"></td>
+                  <td className="px-4 py-3 text-right font-mono text-emerald-700">
+                    {santriRows.filter((s) => s.status === 'Aktif').length} Aktif
+                  </td>
+                  <td className="px-4 py-3"></td>
+                  <td className="px-4 py-3"></td>
+                  <td className="px-4 py-3"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
 
@@ -1129,7 +1372,7 @@ export const LaporanPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {pendaftaranData.map((p) => (
+              {pendaftaranRows.map((p) => (
                 <tr key={p.id}>
                   <td className="px-4 py-3 text-slate-700">{p.tanggal_pendaftaran}</td>
                   <td className="px-4 py-3 text-slate-700">{p.nama_calon}</td>
@@ -1143,13 +1386,13 @@ export const LaporanPage: React.FC = () => {
             <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
               <tr>
                 <td colSpan={2} className="px-4 py-3 text-left uppercase">
-                  TOTAL ({pendaftaranData.length} Pendaftar)
+                  TOTAL ({pendaftaranRows.length} Pendaftar)
                 </td>
                 <td className="px-4 py-3"></td>
                 <td className="px-4 py-3"></td>
                 <td className="px-4 py-3"></td>
                 <td className="px-4 py-3 text-right font-mono text-emerald-700">
-                  {pendaftaranData.filter((p) => p.status === 'Diterima' || p.status === 'Menjadi Santri').length} Lolos
+                  {pendaftaranRows.filter((p) => p.status === 'Diterima' || p.status === 'Menjadi Santri').length} Lolos
                 </td>
               </tr>
             </tfoot>
@@ -1173,7 +1416,7 @@ export const LaporanPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {syahriyahData.map((r) => (
+              {syahriyahRows.map((r) => (
                 <tr key={r.nis}>
                   <td className="px-4 py-3 text-slate-700 font-mono">{r.nis}</td>
                   <td className="px-4 py-3 text-slate-700">{r.nama}</td>
@@ -1188,12 +1431,12 @@ export const LaporanPage: React.FC = () => {
             <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
               <tr>
                 <td colSpan={3} className="px-4 py-3 text-left uppercase">
-                  TOTAL ({syahriyahData.length} Santri)
+                  TOTAL ({syahriyahRows.length} Santri)
                 </td>
                 <td className="px-4 py-3"></td>
-                <td className="px-4 py-3 text-right font-mono">{formatRupiah(syahriyahData.reduce((s, r) => s + r.totalTagihan, 0))}</td>
-                <td className="px-4 py-3 text-right font-mono text-emerald-700">{formatRupiah(syahriyahData.reduce((s, r) => s + r.totalDibayar, 0))}</td>
-                <td className="px-4 py-3 text-right font-mono text-rose-600">{formatRupiah(syahriyahData.reduce((s, r) => s + r.sisaTunggakan, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono">{formatRupiah(syahriyahRows.reduce((s, r) => s + r.totalTagihan, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono text-emerald-700">{formatRupiah(syahriyahRows.reduce((s, r) => s + r.totalDibayar, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono text-rose-600">{formatRupiah(syahriyahRows.reduce((s, r) => s + r.sisaTunggakan, 0))}</td>
                 <td className="px-4 py-3"></td>
               </tr>
             </tfoot>
@@ -1216,7 +1459,7 @@ export const LaporanPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {iuranData.map((r) => (
+              {iuranRows.map((r) => (
                 <tr key={r.iuranId}>
                   <td className="px-4 py-3 text-slate-700">{r.iuranNama}</td>
                   <td className="px-4 py-3 text-slate-700">{labelPeriodeIuran(r.jenisPeriode)}</td>
@@ -1230,11 +1473,11 @@ export const LaporanPage: React.FC = () => {
             <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
               <tr>
                 <td colSpan={2} className="px-4 py-3 text-left uppercase">
-                  TOTAL ({iuranData.length} Program Iuran)
+                  TOTAL ({iuranRows.length} Program Iuran)
                 </td>
-                <td className="px-4 py-3 text-right font-mono">{formatRupiah(iuranData.reduce((sum, r) => sum + r.nominalTagihan, 0))}</td>
-                <td className="px-4 py-3 text-right font-mono text-emerald-700">{formatRupiah(iuranData.reduce((sum, r) => sum + r.totalPembayaran, 0))}</td>
-                <td className="px-4 py-3 text-right font-mono text-rose-600">{formatRupiah(iuranData.reduce((sum, r) => sum + r.sisaTagihan, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono">{formatRupiah(iuranRows.reduce((sum, r) => sum + r.nominalTagihan, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono text-emerald-700">{formatRupiah(iuranRows.reduce((sum, r) => sum + r.totalPembayaran, 0))}</td>
+                <td className="px-4 py-3 text-right font-mono text-rose-600">{formatRupiah(iuranRows.reduce((sum, r) => sum + r.sisaTagihan, 0))}</td>
                 <td className="px-4 py-3"></td>
               </tr>
             </tfoot>
@@ -1249,34 +1492,50 @@ export const LaporanPage: React.FC = () => {
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">No</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Event</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase text-right">Total Tagihan</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase text-right">Total Dibayar</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase text-right">Sisa Tunggakan</th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">NIS</th>
+                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nama Santri</th>
+                {KILATAN_EVENTS.map((event) => (
+                  <th key={event} className="px-3 py-3 text-center text-xs font-semibold text-slate-500 uppercase">
+                    {event}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Total Bayar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {kilatanData.map((r, idx) => (
-                <tr key={r.event}>
-                  <td className="px-4 py-3 text-slate-700 text-center">{idx + 1}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.event}</td>
-                  <td className="px-4 py-3 text-slate-700 text-right font-mono">{formatRupiah(r.totalTagihan)}</td>
-                  <td className="px-4 py-3 text-slate-700 text-right font-mono text-emerald-700">{formatRupiah(r.totalDibayar)}</td>
-                  <td className="px-4 py-3 text-slate-700 text-right font-mono text-rose-600">{formatRupiah(r.sisaTunggakan)}</td>
-                  <td className="px-4 py-3 text-slate-700">{statusBadge(r.status)}</td>
+              {kilatanPerSantriRows.map((r, idx) => (
+                <tr key={r.santriId}>
+                  <td className="px-4 py-3 text-center text-slate-700">{idx + 1}</td>
+                  <td className="px-4 py-3 font-mono text-slate-700">{r.nis}</td>
+                  <td className="px-4 py-3 text-slate-700">{r.nama}</td>
+                  {KILATAN_EVENTS.map((event) => (
+                    <td key={event} className="px-3 py-3 text-center font-mono text-xs">
+                      {r.events[event] > 0 ? (
+                        <span className="text-emerald-700">{formatRupiah(r.events[event])}</span>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </td>
+                  ))}
+                  <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">
+                    {formatRupiah(r.totalDibayar)}
+                  </td>
                 </tr>
               ))}
             </tbody>
             <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
               <tr>
-                <td colSpan={2} className="px-4 py-3 text-left uppercase">
-                  TOTAL ({kilatanData.length} Event)
+                <td colSpan={3} className="px-4 py-3 text-left uppercase">
+                  TOTAL ({kilatanPerSantriRows.length} Santri)
                 </td>
-                <td className="px-4 py-3 text-right font-mono">{formatRupiah(kilatanData.reduce((s, r) => s + r.totalTagihan, 0))}</td>
-                <td className="px-4 py-3 text-right font-mono text-emerald-700">{formatRupiah(kilatanData.reduce((s, r) => s + r.totalDibayar, 0))}</td>
-                <td className="px-4 py-3 text-right font-mono text-rose-600">{formatRupiah(kilatanData.reduce((s, r) => s + r.sisaTunggakan, 0))}</td>
-                <td className="px-4 py-3"></td>
+                {KILATAN_EVENTS.map((event) => (
+                  <td key={event} className="px-3 py-3 text-center font-mono text-emerald-700">
+                    {formatRupiah(kilatanPerSantriRows.reduce((s, r) => s + (r.events[event] || 0), 0))}
+                  </td>
+                ))}
+                <td className="px-4 py-3 text-right font-mono text-emerald-700">
+                  {formatRupiah(kilatanPerSantriRows.reduce((s, r) => s + r.totalDibayar, 0))}
+                </td>
               </tr>
             </tfoot>
           </table>
@@ -1361,6 +1620,16 @@ export const LaporanPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={hapusConfirmOpen}
+        title="Hapus santri terpilih"
+        message={`Yakin hapus ${selectedSantri.length} santri terpilih? Data yang sudah memiliki riwayat pembayaran akan dilewati. Tindakan ini tidak dapat dibatalkan.`}
+        confirmLabel={isDeleting ? 'Menghapus...' : 'Ya, Hapus'}
+        variant="danger"
+        onConfirm={handleHapusTerpilih}
+        onClose={() => setHapusConfirmOpen(false)}
+      />
     </div>
   );
 };

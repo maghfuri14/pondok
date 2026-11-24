@@ -115,3 +115,48 @@ test('importSantri menolak NIS ganda dan tidak menyimpan sebagian data', async (
   assert.equal(list.length, 1, 'rollback: hanya data lama yang tersimpan');
   assert.equal(list[0].nis, '2026001');
 });
+
+test('parseSantriImportRows menolak baris dengan nama dan NIS sama persis', () => {
+  const parsed = parseSantriImportRows([
+    { NIS: '2026001', 'Nama Santri': 'Ahmad Fauzi' },
+    { NIS: '2026001', 'Nama Santri': 'Ahmad Fauzi' },
+    { NIS: '2026002', 'Nama Santri': 'Ahmad Fauzi' },
+  ]);
+
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.errors.length, 1);
+  assert.match(parsed.errors[0].message, /duplikat/i);
+  assert.match(parsed.errors[0].message, /Ahmad Fauzi/);
+  assert.equal(parsed.errors[0].row, 3);
+});
+
+test('importSantri menolak data dengan nama dan NIS sama dengan data tersimpan', async () => {
+  await santriService.importSantri([{ nis: '2026001', nama: 'Ahmad Fauzi' }]);
+
+  await assert.rejects(
+    santriService.importSantri([
+      { nis: '2026002', nama: 'Budi' },
+      { nis: '2026001', nama: 'Ahmad Fauzi' },
+    ]),
+    /sudah ada|duplikat/i
+  );
+
+  const list = JSON.parse(localStorage.getItem(KEY_SANTRI) || '[]');
+  assert.equal(list.length, 1, 'rollback: tidak ada data baru yang tersimpan');
+});
+
+test('nama sama dengan NIS berbeda tidak dianggap duplikat', async () => {
+  const parsed = parseSantriImportRows([
+    { NIS: '2026001', 'Nama Santri': 'Ahmad Fauzi' },
+    { NIS: '2026002', 'Nama Santri': 'Ahmad Fauzi' },
+  ]);
+  assert.equal(parsed.errors.length, 0);
+  assert.equal(parsed.rows.length, 2);
+
+  await santriService.importSantri([{ nis: '2026001', nama: 'Ahmad Fauzi' }]);
+  const hasil = await santriService.importSantri([{ nis: '2026002', nama: 'Ahmad Fauzi' }]);
+  assert.equal(hasil.jumlah, 1);
+
+  const list = JSON.parse(localStorage.getItem(KEY_SANTRI) || '[]');
+  assert.equal(list.length, 2);
+});

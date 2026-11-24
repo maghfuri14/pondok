@@ -52,6 +52,15 @@ export function normalizeHeader(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/**
+ * Kunci duplikat data: nama + NIS harus **keduanya** sama.
+ * Nama dibandingkan tanpa memperhatikan huruf besar/kecil, NIS tanpa spasi.
+ * Baris dengan NIS kosong tidak bisa dicek di sini (NIS akan dibuat otomatis saat simpan).
+ */
+export function kunciDuplikatSantri(nama: string, nis: string): string {
+  return `${nama.trim().toLowerCase()}|${nis.trim().toLowerCase()}`;
+}
+
 function pick(row: Record<string, unknown>, key: keyof SantriImportRowInput): unknown {
   for (const [header, value] of Object.entries(row)) {
     const normalized = normalizeHeader(header);
@@ -108,6 +117,7 @@ export function parseSantriImportRows(rawRows: Record<string, unknown>[]): Parse
   const rows: SantriImportRow[] = [];
   const errors: SantriImportError[] = [];
   const nisTerlihat = new Map<string, number>();
+  const kombinasiTerlihat = new Map<string, number>();
 
   rawRows.forEach((raw, index) => {
     const rowNumber = index + 2; // baris 1 = header
@@ -123,6 +133,19 @@ export function parseSantriImportRows(rawRows: Record<string, unknown>[]): Parse
     }
 
     if (nis) {
+      // Duplikat benar-benar ganda: nama DAN NIS sama → tolak lebih dulu dengan pesan spesifik.
+      const kunciData = kunciDuplikatSantri(nama, nis);
+      const duplikatData = kombinasiTerlihat.get(kunciData);
+      if (duplikatData) {
+        errors.push({
+          row: rowNumber,
+          message: `Data dengan NIS ${nis} dan nama ${nama} duplikat dengan baris ${duplikatData}`,
+        });
+        return;
+      }
+      kombinasiTerlihat.set(kunciData, rowNumber);
+
+      // NIS tetap unik walaupun namanya berbeda (aturan lama dipertahankan).
       const key = nis.toLowerCase();
       const existing = nisTerlihat.get(key);
       if (existing) {

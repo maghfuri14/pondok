@@ -3,6 +3,7 @@ import { INITIAL_MOCK_SANTRI } from './mockSantri';
 import { SEED_DEMO_DATA, generateId, hasRiwayatPembayaran, readJsonStrict, todayLocal, isValidCalendarDate } from './core';
 import {
   SantriImportRowInput,
+  kunciDuplikatSantri,
   normalizeKategori,
   normalizeStatus,
   normalizeTanggal,
@@ -27,7 +28,15 @@ function getStoredSantri(): Santri[] {
 }
 
 function saveSantriList(list: Santri[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch (err) {
+    const nama = err instanceof DOMException ? err.name : '';
+    if (nama === 'QuotaExceededError' || nama === 'NS_ERROR_DOM_QUOTA_REACHED') {
+      throw new Error('Penyimpanan browser penuh. Hapus foto lama atau gunakan foto yang lebih kecil.');
+    }
+    throw err;
+  }
 }
 
 function normalizeNis(nis: string): string {
@@ -182,7 +191,12 @@ export const santriService = {
 
     const list = getStoredSantri();
     const existing = new Set(list.map((s) => normalizeNis(s.nis)));
+    // Data dianggap duplikat hanya jika NAMA dan NIS keduanya sama.
+    const existingCombo = new Set(
+      list.map((s) => kunciDuplikatSantri(s.nama, s.nis))
+    );
     const seen = new Set<string>();
+    const seenCombo = new Set<string>();
     const year = String(tahunNis ?? new Date().getFullYear());
 
     let maxSequence = 0;
@@ -202,6 +216,16 @@ export const santriService = {
       if (!nama) throw new Error(`Baris ${baris}: nama santri wajib diisi`);
 
       let nis = (row.nis || '').trim();
+      const kunciAwal = nis ? kunciDuplikatSantri(nama, nis) : '';
+
+      // Duplikat benar-benar ganda (nama + NIS keduanya sama) ditolak lebih dulu.
+      if (kunciAwal && existingCombo.has(kunciAwal)) {
+        throw new Error(`Baris ${baris}: data dengan NIS ${nis} dan nama ${nama} sudah ada`);
+      }
+      if (kunciAwal && seenCombo.has(kunciAwal)) {
+        throw new Error(`Baris ${baris}: data dengan NIS ${nis} dan nama ${nama} duplikat di file`);
+      }
+
       if (nis) {
         const key = normalizeNis(nis);
         if (existing.has(key)) throw new Error(`Baris ${baris}: NIS ${nis} sudah digunakan`);
@@ -211,6 +235,12 @@ export const santriService = {
           maxSequence += 1;
           nis = `${year}${String(maxSequence).padStart(3, '0')}`;
         } while (existing.has(normalizeNis(nis)) || seen.has(normalizeNis(nis)));
+      }
+
+      // NIS otomatis tidak mungkin sama dengan data lama, tetapi tetap dicek untuk konsistensi.
+      const kunciData = kunciAwal || kunciDuplikatSantri(nama, nis);
+      if (seenCombo.has(kunciData)) {
+        throw new Error(`Baris ${baris}: data dengan NIS ${nis} dan nama ${nama} duplikat di file`);
       }
 
       const tanggalMasuk = normalizeTanggal(row.tanggal_masuk);
@@ -231,6 +261,7 @@ export const santriService = {
       validateSantri(record);
       prepared.push(record);
       seen.add(normalizeNis(nis));
+      seenCombo.add(kunciData);
     });
 
     saveSantriList([...prepared, ...list]);

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus,
-  FileText,
   Search,
   RotateCcw,
   Edit,
@@ -77,6 +76,20 @@ export const KasListPage: React.FC = () => {
 
   const saldoKas = totalPemasukan - totalPengeluaran;
 
+  const formatDateStr = (dateStr: string) => {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   // Opsi filter: gabungan kategori dari Pengaturan + kategori yang ada di data
   // historis, supaya transaksi lama tetap bisa difilter.
   const kategoriFilterOptions = useMemo(() => {
@@ -104,12 +117,19 @@ export const KasListPage: React.FC = () => {
       if (filterKategori !== 'Semua' && item.kategori_nama !== filterKategori) {
         return false;
       }
-      // Search Query
+      // Search Query — mencakup semua kolom yang tampil di tabel
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        const matchKet = (item.keterangan || '').toLowerCase().includes(q);
-        const matchKat = item.kategori_nama.toLowerCase().includes(q);
-        if (!matchKet && !matchKat) return false;
+        const fields = [
+          item.tanggal,
+          formatDateStr(item.tanggal),
+          item.jenis,
+          item.kategori_nama,
+          item.keterangan || '',
+          String(item.nominal),
+          formatRupiah(item.nominal),
+        ];
+        if (!fields.some((field) => field.toLowerCase().includes(q))) return false;
       }
       // Date Range Filter
       if (startDate && item.tanggal < startDate) {
@@ -129,6 +149,23 @@ export const KasListPage: React.FC = () => {
     setFilterKategori('Semua');
     setStartDate('');
     setEndDate('');
+  };
+
+  // Kategori yang tidak cocok dengan jenis baru dibersihkan agar tidak menghasilkan 0 data.
+  const handleJenisChange = (jenis: string) => {
+    setFilterJenis(jenis);
+    setFilterKategori('Semua');
+  };
+
+  // Jaga agar rentang tanggal tidak terbalik.
+  const handleStartDateChange = (value: string) => {
+    setStartDate(value);
+    if (value && endDate && value > endDate) setEndDate(value);
+  };
+
+  const handleEndDateChange = (value: string) => {
+    setEndDate(value);
+    if (value && startDate && value < startDate) setStartDate(value);
   };
 
   const handleConfirmDelete = async () => {
@@ -157,20 +194,6 @@ export const KasListPage: React.FC = () => {
     }
   };
 
-  const formatDateStr = (dateStr: string) => {
-    if (!dateStr) return '-';
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
   const handleExportPdf = () => {
     if (filteredList.length === 0) {
       showToast('Tidak ada transaksi kas untuk diekspor', 'error');
@@ -187,6 +210,7 @@ export const KasListPage: React.FC = () => {
       filename: `Laporan-Kas-${currentYear}`,
       orientation: 'portrait',
       filterInfo: [
+        ...(searchQuery.trim() ? [{ label: 'Pencarian', value: searchQuery.trim() }] : []),
         { label: 'Jenis', value: filterJenis },
         { label: 'Kategori', value: filterKategori },
         ...(startDate ? [{ label: 'Dari Tanggal', value: startDate }] : []),
@@ -241,14 +265,6 @@ export const KasListPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={handleExportPdf}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-sm font-medium transition-colors shadow-xs cursor-pointer"
-          >
-            <FileText className="w-4 h-4 text-rose-600" />
-            <span>Export PDF</span>
-          </button>
-
           {!isPemilik && (
             <button
               onClick={() => {
@@ -324,82 +340,76 @@ export const KasListPage: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-center">
-          {/* Search Input */}
-          <div className="relative sm:col-span-2">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Pencarian — paling besar & paling kiri */}
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari keterangan atau kategori..."
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-[#0F172A]"
+              placeholder="Cari transaksi..."
+              aria-label="Cari transaksi kas"
+              className="w-full h-10 pl-9 pr-3 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-[#0F172A] placeholder:text-slate-400"
             />
           </div>
 
-          {/* Jenis Dropdown */}
-          <div>
-            <select
-              value={filterJenis}
-              onChange={(e) => setFilterJenis(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-slate-700"
-            >
-              <option value="Semua">Semua Jenis</option>
-              <option value="Pemasukan">Pemasukan</option>
-              <option value="Pengeluaran">Pengeluaran</option>
-            </select>
-          </div>
+          {/* Jenis */}
+          <select
+            value={filterJenis}
+            onChange={(e) => handleJenisChange(e.target.value)}
+            aria-label="Jenis transaksi"
+            title="Jenis transaksi"
+            className="w-auto min-w-[120px] px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-slate-700"
+          >
+            <option value="Semua">Semua Jenis</option>
+            <option value="Pemasukan">Pemasukan</option>
+            <option value="Pengeluaran">Pengeluaran</option>
+          </select>
 
-          {/* Kategori Dropdown */}
-          <div>
-            <select
-              value={filterKategori}
-              onChange={(e) => setFilterKategori(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-slate-700"
-            >
-              <option value="Semua">Semua Kategori</option>
-              {kategoriFilterOptions.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Kategori */}
+          <select
+            value={filterKategori}
+            onChange={(e) => setFilterKategori(e.target.value)}
+            aria-label="Kategori transaksi"
+            title="Kategori transaksi"
+            className="w-auto min-w-[130px] px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-slate-700"
+          >
+            <option value="Semua">Semua Kategori</option>
+            {kategoriFilterOptions.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
 
-          {/* Reset Filter Button */}
-          <div className="flex justify-start sm:justify-end">
-            <button
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-800 transition-colors rounded-lg hover:bg-slate-100"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset</span>
-            </button>
-          </div>
-        </div>
+          {/* Rentang tanggal */}
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => handleStartDateChange(e.target.value)}
+            aria-label="Dari tanggal"
+            title="Dari tanggal"
+            className="w-[140px] h-10 px-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-slate-700"
+          />
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => handleEndDateChange(e.target.value)}
+            aria-label="Sampai tanggal"
+            title="Sampai tanggal"
+            className="w-[140px] h-10 px-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-slate-700"
+          />
 
-        {/* Date Filter Range */}
-        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 text-xs text-slate-600">
-          <span className="font-semibold text-slate-500">Rentang Tanggal:</span>
-          <div className="flex items-center gap-1.5">
-            <span>Dari:</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="px-2.5 py-1.5 border border-slate-200 rounded-lg outline-none focus:border-[#059669] bg-white text-slate-700"
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span>Sampai:</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="px-2.5 py-1.5 border border-slate-200 rounded-lg outline-none focus:border-[#059669] bg-white text-slate-700"
-            />
-          </div>
+          {/* Reset */}
+          <button
+            onClick={resetFilters}
+            className="inline-flex items-center gap-1.5 h-10 px-3 text-sm text-slate-500 hover:text-slate-800 transition-colors rounded-lg hover:bg-slate-100 shrink-0"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset</span>
+          </button>
         </div>
       </div>
 

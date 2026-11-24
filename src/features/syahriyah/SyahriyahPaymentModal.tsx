@@ -193,7 +193,7 @@ export const SyahriyahPaymentModal: React.FC<SyahriyahPaymentModalProps> = ({
         showToast('Gagal memuat data syahriyah', 'error');
       });
     }
-  }, [isOpen, selectedSantri, selectedYear, bulanAktif, tahunAktif, isSuccess, itemInputs, waivers]);
+  }, [isOpen, selectedSantri, selectedYear, bulanAktif, tahunAktif, isSuccess, waivers]);
 
   /** Sisa tagihan = tarif periode − keringanan − yang sudah dibayar. */
   const getSisaTagihan = async (

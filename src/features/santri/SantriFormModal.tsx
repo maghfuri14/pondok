@@ -1,11 +1,13 @@
 import { todayLocal } from '../../lib/core';
-import React, { useState, useEffect } from 'react';
-import { X, Upload, Check, Home, Building2, Calendar, UserCheck, UserX, Wand2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Upload, Check, Home, Building2, Calendar, UserCheck, UserX, Wand2, Trash2 } from 'lucide-react';
 import { Santri, KategoriSantri, StatusSantri, PeriodeNonaktif } from '../../types/santri';
 import { santriService } from '../../lib/santriService';
 import { pendaftaranService } from '../../lib/pendaftaranService';
 import { showToast } from '../../components/ui/Toast';
 import { HelpTooltip } from '../../components/ui/HelpTooltip';
+import { SantriAvatar } from '../../components/ui/SantriAvatar';
+import { kompresFotoSantri } from '../../lib/fotoSantri';
 
 interface SantriFormModalProps {
   isOpen: boolean;
@@ -36,6 +38,10 @@ export const SantriFormModal: React.FC<SantriFormModalProps> = ({
   const [tanggalKeluar, setTanggalKeluar] = useState('');
   const [periodeNonaktif, setPeriodeNonaktif] = useState<PeriodeNonaktif[]>([]);
   const [catatan, setCatatan] = useState('');
+  const [foto, setFoto] = useState('');
+  const [fotoError, setFotoError] = useState<string | null>(null);
+  const [isCompressingFoto, setIsCompressingFoto] = useState(false);
+  const fileFotoRef = useRef<HTMLInputElement>(null);
 
   // Validation & Loading states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,6 +55,7 @@ export const SantriFormModal: React.FC<SantriFormModalProps> = ({
       setErrors({});
       setNisError(null);
       setIsNisValid(false);
+      setFotoError(null);
 
       if (santriId) {
         santriService
@@ -66,6 +73,7 @@ export const SantriFormModal: React.FC<SantriFormModalProps> = ({
               setTanggalKeluar(data.tanggal_keluar || '');
               setPeriodeNonaktif(data.periode_nonaktif || []);
               setCatatan(data.catatan || '');
+              setFoto(data.foto || '');
               setIsNisValid(true);
             }
           })
@@ -85,6 +93,7 @@ export const SantriFormModal: React.FC<SantriFormModalProps> = ({
         setTanggalKeluar('');
         setPeriodeNonaktif([]);
         setCatatan('');
+        setFoto('');
       }
     }
   }, [isOpen, santriId]);
@@ -124,6 +133,31 @@ export const SantriFormModal: React.FC<SantriFormModalProps> = ({
       setNisError(null);
       setIsNisValid(true);
     }
+  };
+
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // membolehkan memilih ulang file yang sama
+    if (!file) return;
+
+    setIsCompressingFoto(true);
+    setFotoError(null);
+    try {
+      setFoto(await kompresFotoSantri(file));
+      showToast('Foto berhasil dimuat', 'success');
+    } catch (err) {
+      const pesan = err instanceof Error ? err.message : 'Gagal memuat foto';
+      setFotoError(pesan);
+      showToast(pesan, 'error');
+    } finally {
+      setIsCompressingFoto(false);
+    }
+  };
+
+  const hapusFoto = () => {
+    setFoto('');
+    setFotoError(null);
+    showToast('Foto dihapus', 'info');
   };
 
   const validate = (): boolean => {
@@ -212,6 +246,7 @@ export const SantriFormModal: React.FC<SantriFormModalProps> = ({
               }
             : {}),
           catatan: catatan.trim() || undefined,
+          foto, // '' = hapus foto lama
         });
         showToast('Data santri berhasil diperbarui', 'success');
       } else {
@@ -231,6 +266,7 @@ export const SantriFormModal: React.FC<SantriFormModalProps> = ({
               }
             : {}),
           catatan: catatan.trim() || undefined,
+          ...(foto ? { foto } : {}),
         });
         showToast('Santri baru berhasil ditambahkan', 'success');
       }
@@ -271,19 +307,46 @@ export const SantriFormModal: React.FC<SantriFormModalProps> = ({
         <form id="santriForm" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Foto Upload UI */}
           <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 border-2 border-emerald-500 text-[#059669] font-bold text-xl flex items-center justify-center shrink-0">
-              {nama.trim() ? nama.trim().substring(0, 2).toUpperCase() : 'ST'}
-            </div>
-            <div>
-              <button
-                type="button"
-                onClick={() => showToast('Upload foto akan diaktifkan di modul berikutnya', 'info')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors shadow-xs"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                Pilih Foto
-              </button>
-              <p className="text-[11px] text-slate-500 mt-1">Opsional, maks 2MB (JPG/PNG)</p>
+            <SantriAvatar
+              nama={nama}
+              foto={foto}
+              className="w-16 h-16"
+              textClassName="text-xl"
+            />
+            <div className="min-w-0">
+              <input
+                ref={fileFotoRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleFotoChange}
+                aria-label="Pilih foto santri"
+                className="hidden"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileFotoRef.current?.click()}
+                  disabled={isCompressingFoto}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-50 text-xs font-semibold text-slate-700 transition-colors shadow-xs"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {isCompressingFoto ? 'Memproses...' : foto ? 'Ganti Foto' : 'Pilih Foto'}
+                </button>
+                {foto && (
+                  <button
+                    type="button"
+                    onClick={hapusFoto}
+                    className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Hapus Foto
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Opsional, JPG/PNG/WebP maks 5MB (otomatis dikecilkan)
+              </p>
+              {fotoError && <p className="text-[11px] text-red-600 mt-1">{fotoError}</p>}
             </div>
           </div>
 

@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
-  Download,
   Upload,
-  FileText,
   Search,
   RotateCcw,
+  ChevronDown,
   ArrowUp,
   ArrowDown,
   Eye,
@@ -16,17 +15,19 @@ import {
   UserX,
   SearchX,
   AlertTriangle,
+  MoreVertical,
+  UserRound,
+  House,
 } from 'lucide-react';
 import { useSantriList } from './useSantriList';
 import { SantriFormModal } from './SantriFormModal';
 import { ImportSantriModal } from './ImportSantriModal';
 import { StatusToggleConfirmModal } from './StatusToggleConfirmModal';
 import { showToast } from '../../components/ui/Toast';
-import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { ResponsiveFilterSheet } from '../../components/ui/ResponsiveFilterSheet';
+import { SantriAvatar } from '../../components/ui/SantriAvatar';
 import { authStore, AuthUser } from '../../store/authStore';
 import { santriService } from '../../lib/santriService';
-import { exportLaporanToPdf } from '../../lib/exportHelper';
-import { Santri } from '../../types/santri';
 
 export const SantriListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -70,11 +71,12 @@ export const SantriListPage: React.FC = () => {
   // Modal states
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [draftFilterKategori, setDraftFilterKategori] = useState(filterKategori);
+  const [draftFilterStatus, setDraftFilterStatus] = useState(filterStatus);
   const [selectedSantriId, setSelectedSantriId] = useState<string | null>(null);
   const [deleteConfirmSantri, setDeleteConfirmSantri] = useState<{ id: string; nama: string } | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const activeFilterCount = Number(filterKategori !== 'Semua') + Number(filterStatus !== 'Semua');
 
   const handleConfirmDelete = async () => {
     if (!deleteConfirmSantri) return;
@@ -97,146 +99,6 @@ export const SantriListPage: React.FC = () => {
   const openEditModal = (id: string) => {
     setSelectedSantriId(id);
     setModalOpen(true);
-  };
-
-  const exportSantriPdf = (
-    list: Santri[],
-    judul: string,
-    filenameBase: string,
-    extraFilter: { label: string; value: string }[] = []
-  ) => {
-    if (list.length === 0) {
-      showToast('Tidak ada data santri untuk diekspor', 'error');
-      return;
-    }
-    const currentYear = new Date().getFullYear();
-    const aktifCount = list.filter((s) => s.status === 'Aktif').length;
-    const nonaktifCount = list.length - aktifCount;
-
-    exportLaporanToPdf({
-      title: judul,
-      subtitle: `Tahun Akademik: ${currentYear}`,
-      filename: `${filenameBase}-${currentYear}`,
-      orientation: 'landscape',
-      filterInfo: [
-        { label: 'Kategori', value: filterKategori },
-        { label: 'Status', value: filterStatus },
-        ...(searchQuery ? [{ label: 'Pencarian', value: searchQuery }] : []),
-        ...extraFilter,
-      ],
-      summaryMetrics: [
-        { label: 'TOTAL SANTRI', value: `${list.length} Santri` },
-        { label: 'SANTRI AKTIF', value: `${aktifCount} Santri` },
-        { label: 'SANTRI TIDAK AKTIF', value: `${nonaktifCount} Santri` },
-      ],
-      headers: ['No', 'NIS', 'Nama Santri', 'Kategori', 'Status', 'Nama Wali', 'No HP Wali', 'Tanggal Masuk'],
-      rows: list.map((s, idx) => [
-        idx + 1,
-        s.nis,
-        s.nama,
-        s.kategori,
-        s.status,
-        s.nama_wali || '-',
-        s.no_hp_wali || s.no_hp_santri || '-',
-        s.tanggal_masuk || '-',
-      ]),
-      footers: [
-        [
-          '',
-          '',
-          `TOTAL: ${list.length} Santri`,
-          '',
-          `${aktifCount} Aktif / ${nonaktifCount} Nonaktif`,
-          '',
-          '',
-          '',
-        ],
-      ],
-      columnStyles: {
-        0: { cellWidth: 10, halign: 'center' },
-        1: { cellWidth: 24, halign: 'center' },
-        2: { cellWidth: 50 },
-        3: { cellWidth: 24, halign: 'center' },
-        4: { cellWidth: 24, halign: 'center' },
-        5: { cellWidth: 45 },
-        6: { cellWidth: 35, halign: 'center' },
-        7: { cellWidth: 30, halign: 'center' },
-      },
-    });
-  };
-
-  const handleExport = () => {
-    exportSantriPdf(filtered, 'Laporan Master Data Santri', 'Data-Santri');
-  };
-
-  // Batch selection
-  const selectedSantri = React.useMemo(
-    () => filtered.filter((s) => selectedIds.has(s.id)),
-    [filtered, selectedIds]
-  );
-
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [searchQuery, filterKategori, filterStatus]);
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectPage = () => {
-    const allSelected = paginated.length > 0 && paginated.every((s) => selectedIds.has(s.id));
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      paginated.forEach((s) => {
-        if (allSelected) next.delete(s.id);
-        else next.add(s.id);
-      });
-      return next;
-    });
-  };
-
-  const handleBulkPrint = () => {
-    if (selectedSantri.length === 0) {
-      showToast('Pilih santri yang akan dicetak terlebih dahulu', 'error');
-      return;
-    }
-    exportSantriPdf(selectedSantri, 'Laporan Data Santri Terpilih', 'Data-Santri-Terpilih', [
-      { label: 'Jumlah Dipilih', value: `${selectedSantri.length} Santri` },
-    ]);
-  };
-
-  const handleBulkDelete = async () => {
-    if (isBulkDeleting) return;
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    setIsBulkDeleting(true);
-    const gagal: string[] = [];
-    let berhasil = 0;
-    for (const id of ids) {
-      try {
-        await santriService.deleteSantri(id);
-        berhasil += 1;
-      } catch (err) {
-        gagal.push(err instanceof Error ? err.message : 'Gagal menghapus data');
-      }
-    }
-    if (berhasil > 0) {
-      showToast(
-        `${berhasil} data santri dihapus${gagal.length ? `, ${gagal.length} gagal` : ''}`,
-        gagal.length ? 'info' : 'success'
-      );
-    } else {
-      showToast(gagal[0] || 'Tidak ada data yang dihapus', 'error');
-    }
-    setIsBulkDeleting(false);
-    setBulkDeleteOpen(false);
-    setSelectedIds(new Set());
-    refresh();
   };
 
   const handleImport = () => {
@@ -270,13 +132,6 @@ export const SantriListPage: React.FC = () => {
               <span>Import</span>
             </button>
             <button
-              onClick={handleExport}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-sm font-medium transition-colors shadow-xs cursor-pointer"
-            >
-              <FileText className="w-4 h-4 text-rose-600" />
-              <span>Export PDF</span>
-            </button>
-            <button
               onClick={openAddModal}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#059669] hover:bg-[#047857] text-white text-sm font-semibold transition-colors shadow-xs"
             >
@@ -288,95 +143,110 @@ export const SantriListPage: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-xs">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-center">
+      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 shadow-xs sm:p-3 lg:bg-white lg:p-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_40px] items-center gap-2 lg:grid-cols-5 lg:gap-3">
           {/* Search Input */}
-          <div className="sm:col-span-2 relative">
+          <div className="relative lg:col-span-2">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari NIS, nama, wali, atau HP..."
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-[#0F172A]"
+              placeholder="Cari NIS, nama, wali..."
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-[#0F172A] outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] sm:h-11"
             />
           </div>
 
           {/* Kategori Dropdown */}
-          <div>
+          <div className="relative hidden min-w-0 lg:block">
             <select
               value={filterKategori}
               onChange={(e) => setFilterKategori(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-slate-700"
+              className="h-10 w-full min-w-0 appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-2 pr-6 text-xs text-slate-700 outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] sm:h-11 sm:px-3 sm:pr-8 sm:text-sm"
             >
               <option value="Semua">Semua Kategori</option>
               <option value="Mukim">Mukim</option>
               <option value="Nduduk">Nduduk</option>
               <option value="Kilatan">Kilatan</option>
             </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 sm:right-2.5" />
           </div>
 
           {/* Status Dropdown */}
-          <div>
+          <div className="relative hidden min-w-0 lg:block">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] bg-white text-slate-700"
+              className="h-10 w-full min-w-0 appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-2 pr-6 text-xs text-slate-700 outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669] sm:h-11 sm:px-3 sm:pr-8 sm:text-sm"
             >
               <option value="Semua">Semua Status</option>
               <option value="Aktif">Aktif</option>
               <option value="Tidak Aktif">Tidak Aktif</option>
             </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 sm:right-2.5" />
           </div>
 
+          <ResponsiveFilterSheet
+            title="Filter Santri"
+            description="Pilih kategori dan status santri"
+            activeFilterCount={activeFilterCount}
+            onOpen={() => {
+              setDraftFilterKategori(filterKategori);
+              setDraftFilterStatus(filterStatus);
+            }}
+            onApply={() => {
+              setFilterKategori(draftFilterKategori);
+              setFilterStatus(draftFilterStatus);
+            }}
+          >
+            <label className="block space-y-2 text-sm font-medium text-slate-700">
+              Kategori
+              <span className="relative block">
+                <select
+                  value={draftFilterKategori}
+                  onChange={(event) => setDraftFilterKategori(event.target.value)}
+                  className="h-12 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-10 text-base text-slate-800 outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
+                >
+                  <option value="Semua">Semua Kategori</option>
+                  <option value="Mukim">Mukim</option>
+                  <option value="Nduduk">Nduduk</option>
+                  <option value="Kilatan">Kilatan</option>
+                </select>
+                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </span>
+            </label>
+
+            <label className="block space-y-2 text-sm font-medium text-slate-700">
+              Status
+              <span className="relative block">
+                <select
+                  value={draftFilterStatus}
+                  onChange={(event) => setDraftFilterStatus(event.target.value)}
+                  className="h-12 w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-10 text-base text-slate-800 outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669]"
+                >
+                  <option value="Semua">Semua Status</option>
+                  <option value="Aktif">Aktif</option>
+                  <option value="Tidak Aktif">Tidak Aktif</option>
+                </select>
+                <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </span>
+            </label>
+          </ResponsiveFilterSheet>
+
           {/* Reset Button */}
-          <div className="flex justify-start sm:justify-end">
+          <div className="flex justify-end lg:col-span-1">
             <button
+              type="button"
               onClick={resetFilter}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-slate-800 transition-colors rounded-lg hover:bg-slate-100"
+              aria-label="Reset filter"
+              title="Reset filter"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 sm:h-11 sm:w-11 lg:border-transparent lg:bg-transparent"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset</span>
+              <RotateCcw className="h-4 w-4" />
             </button>
           </div>
         </div>
       </div>
-
-      {/* Batch Action Bar */}
-      {selectedIds.size > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
-          <div className="text-sm text-emerald-900 font-semibold">
-            {selectedIds.size} santri dipilih
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleBulkPrint}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold transition-colors"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Cetak PDF Terpilih
-            </button>
-            {isSuperAdmin && (
-              <button
-                type="button"
-                onClick={() => setBulkDeleteOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Hapus Terpilih
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setSelectedIds(new Set())}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-white transition-colors"
-            >
-              Bersihkan
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Main Table Card */}
       <div className="bg-white border border-[#E2E8F0] rounded-xl shadow-xs overflow-hidden">
@@ -449,15 +319,6 @@ export const SantriListPage: React.FC = () => {
               <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-[#E2E8F0] text-xs font-semibold uppercase text-slate-500 select-none">
-                  <th scope="col" className="w-10 px-4 py-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={paginated.length > 0 && paginated.every((s) => selectedIds.has(s.id))}
-                      onChange={toggleSelectPage}
-                      aria-label="Pilih semua di halaman ini"
-                      className="rounded border-slate-300 text-[#059669] cursor-pointer"
-                    />
-                  </th>
                   <th scope="col" className="w-[60px] px-2 py-3 text-center">
                     Foto
                   </th>
@@ -488,23 +349,14 @@ export const SantriListPage: React.FC = () => {
                   <tr
                     key={santri.id}
                     onClick={() => navigate(`/santri/${santri.id}`)}
-                    className={`hover:bg-slate-50/70 cursor-pointer transition-colors group ${
-                      selectedIds.has(santri.id) ? 'bg-emerald-50/50' : ''
-                    }`}
+                    className="hover:bg-slate-50/70 cursor-pointer transition-colors group"
                   >
-                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(santri.id)}
-                        onChange={() => toggleSelect(santri.id)}
-                        aria-label={`Pilih ${santri.nama}`}
-                        className="rounded border-slate-300 text-[#059669] cursor-pointer"
-                      />
-                    </td>
                     <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center mx-auto border border-emerald-300 shrink-0">
-                        {santri.nama.trim().substring(0, 2).toUpperCase()}
-                      </div>
+                      <SantriAvatar
+                        nama={santri.nama}
+                        foto={santri.foto}
+                        className="w-10 h-10 mx-auto"
+                      />
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-700 font-medium whitespace-nowrap">
                       {santri.nis}
@@ -607,81 +459,44 @@ export const SantriListPage: React.FC = () => {
             </div>
 
             {/* Mobile card layout */}
-            <div className="md:hidden divide-y divide-slate-100">
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 md:hidden">
               {paginated.map((santri) => (
-                <div key={santri.id} className="p-4 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(santri.id)}
-                      onChange={() => toggleSelect(santri.id)}
-                      aria-label={`Pilih ${santri.nama}`}
-                      className="mt-1 rounded border-slate-300 text-[#059669] cursor-pointer shrink-0"
-                    />
-                    <div
-                      className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center border border-emerald-300 shrink-0 cursor-pointer"
-                      onClick={() => navigate(`/santri/${santri.id}`)}
-                    >
-                      {santri.nama.trim().substring(0, 2).toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => navigate(`/santri/${santri.id}`)}>
-                      <p className="font-semibold text-[#0F172A] truncate">{santri.nama}</p>
-                      <p className="font-mono text-xs text-slate-500">{santri.nis}</p>
-                      <p className="text-xs text-slate-500 truncate">Wali: {santri.nama_wali}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap pl-8">
-                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                      {santri.kategori}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                        santri.status === 'Aktif'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-red-50 text-red-700 border-red-200'
-                      }`}
-                    >
-                      {santri.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-end gap-1 pl-8">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/santri/${santri.id}`)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-[11px] font-semibold"
-                    >
-                      <Eye className="w-3.5 h-3.5" /> Detail
+                <article key={santri.id} className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                  <div className="flex min-w-0 gap-4">
+                    <button type="button" onClick={() => navigate(`/santri/${santri.id}`)} aria-label={`Lihat profil ${santri.nama}`} className="shrink-0 rounded-xl">
+                      <SantriAvatar
+                        nama={santri.nama}
+                        foto={santri.foto}
+                        className="h-32 w-24"
+                        textClassName="text-lg"
+                        rounded="lg"
+                      />
                     </button>
-                    {!isPemilik && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(santri.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-[11px] font-semibold"
-                        >
-                          <Edit className="w-3.5 h-3.5" /> Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => bukaModalToggleStatus(santri)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-700 text-[11px] font-semibold"
-                        >
-                          {santri.status === 'Aktif' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                          Status
-                        </button>
-                        {isSuperAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirmSantri({ id: santri.id, nama: santri.nama })}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 text-[11px] font-semibold"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" /> Hapus
-                          </button>
-                        )}
-                      </>
-                    )}
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-base font-bold text-slate-900 sm:text-xl">{santri.nama}</h3>
+                      <p className="mt-1 truncate text-[11px] text-slate-500 sm:text-xs">( NIS: {santri.nis} )</p>
+                      <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                        <p className="flex min-w-0 items-center gap-2"><UserRound className="h-4 w-4 shrink-0 text-teal-700" /><span className="truncate"><span className="font-medium text-slate-700">Wali :</span> {santri.nama_wali || '-'}</span></p>
+                        <p className="flex min-w-0 items-center gap-2"><House className="h-4 w-4 shrink-0 text-teal-700" /><span className="truncate"><span className="font-medium text-slate-700">Mukim :</span> {santri.kategori || '-'}</span></p>
+                        <p className="flex min-w-0 items-center gap-2">
+                          {santri.status === 'Aktif' ? <UserCheck className="h-4 w-4 shrink-0 text-teal-700" /> : <UserX className="h-4 w-4 shrink-0 text-slate-500" />}
+                          <span className="shrink-0 font-medium text-slate-700">Status :</span>
+                          <span className={`inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-xs font-medium ${santri.status === 'Aktif' ? 'bg-green-100 text-green-700' : 'bg-rose-100 text-rose-700'}`}>
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${santri.status === 'Aktif' ? 'bg-green-600' : 'bg-rose-600'}`} />{santri.status}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                  <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                    <button type="button" onClick={() => navigate(`/santri/${santri.id}`)} className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800"><Eye className="h-4 w-4 shrink-0" />Detail</button>
+                    <div className="flex items-center gap-1.5">
+                      {!isPemilik && <button type="button" onClick={() => openEditModal(santri.id)} title={`Edit ${santri.nama}`} aria-label={`Edit ${santri.nama}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-teal-700 transition-colors hover:bg-teal-50"><Edit className="h-4 w-4" /></button>}
+                      {!isPemilik && <button type="button" onClick={() => bukaModalToggleStatus(santri)} title={santri.status === 'Aktif' ? `Nonaktifkan ${santri.nama}` : `Aktifkan ${santri.nama}`} aria-label={santri.status === 'Aktif' ? `Nonaktifkan ${santri.nama}` : `Aktifkan ${santri.nama}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-amber-700 transition-colors hover:bg-amber-50">{santri.status === 'Aktif' ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}</button>}
+                      {isSuperAdmin && <button type="button" onClick={() => setDeleteConfirmSantri({ id: santri.id, nama: santri.nama })} title={`Hapus ${santri.nama}`} aria-label={`Hapus ${santri.nama}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-rose-700 transition-colors hover:bg-rose-50"><Trash2 className="h-4 w-4" /></button>}
+                    </div>
+                  </div>
+                </article>
               ))}
             </div>
           </>
@@ -809,19 +624,6 @@ export const SantriListPage: React.FC = () => {
         isLoading={isTogglingStatus}
         onConfirm={confirmToggleStatus}
         onClose={tutupModalToggleStatus}
-      />
-
-      {/* Konfirmasi Hapus Massal */}
-      <ConfirmDialog
-        isOpen={bulkDeleteOpen}
-        title="Hapus Santri Terpilih"
-        message={`Hapus ${selectedIds.size} data santri terpilih?\n\nSantri yang sudah memiliki riwayat pembayaran tidak akan dihapus dan akan dilaporkan gagal.`}
-        confirmLabel={isBulkDeleting ? 'Menghapus...' : 'Ya, Hapus'}
-        variant="danger"
-        onConfirm={handleBulkDelete}
-        onClose={() => {
-          if (!isBulkDeleting) setBulkDeleteOpen(false);
-        }}
       />
     </div>
   );

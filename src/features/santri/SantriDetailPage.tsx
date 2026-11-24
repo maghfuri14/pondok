@@ -30,6 +30,7 @@ import { activityLogService, ActivityLogEntry } from '../../lib/activityLogServi
 import { buatPayloadToggleStatus } from '../../lib/santriStatus';
 import { formatRupiah } from '../../lib/formatter';
 import { todayLocal } from '../../lib/core';
+import { SantriAvatar } from '../../components/ui/SantriAvatar';
 import { SantriFormModal } from './SantriFormModal';
 import { StatusToggleConfirmModal } from './StatusToggleConfirmModal';
 import { authStore, AuthUser } from '../../store/authStore';
@@ -336,9 +337,12 @@ export const SantriDetailPage: React.FC = () => {
 
       {/* Profile Card Header */}
       <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 sm:p-6 shadow-xs flex items-center gap-4 sm:gap-6">
-        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-emerald-100 text-emerald-700 font-bold text-lg sm:text-xl flex items-center justify-center shrink-0 border-2 border-emerald-400">
-          {santri.nama.trim().substring(0, 2).toUpperCase()}
-        </div>
+        <SantriAvatar
+          nama={santri.nama}
+          foto={santri.foto}
+          className="w-14 h-14 sm:w-16 sm:h-16"
+          textClassName="text-lg sm:text-xl"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <h1 className="text-lg sm:text-2xl font-bold text-[#0F172A] tracking-tight truncate">

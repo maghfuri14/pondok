@@ -4,7 +4,7 @@ import { pendaftaranService } from './pendaftaranService';
 import { syahriyahService } from './syahriyahService';
 import { masterIuranService } from './pengaturanService';
 import { iuranPembayaranService } from './iuranPembayaranService';
-import { kilatanService } from './kilatanService';
+import { kilatanService, KILATAN_EVENTS } from './kilatanService';
 import { Kas } from '../types/kas';
 import { Santri } from '../types/santri';
 import { Pendaftaran } from '../types/pendaftaran';
@@ -50,6 +50,17 @@ export interface LaporanKilatanRow {
   totalDibayar: number;
   sisaTunggakan: number;
   status: 'Lunas' | 'Sebagian' | 'Belum';
+}
+
+/** Baris rekap kilatan per santri: NIS + satu kolom untuk tiap event + total bayar. */
+export interface LaporanKilatanPerSantriRow {
+  santriId: string;
+  nis: string;
+  nama: string;
+  kategori: string;
+  /** Nominal dibayar per event (0 bila belum bayar). */
+  events: Record<EventKilatan, number>;
+  totalDibayar: number;
 }
 
 export const laporanService = {
@@ -221,5 +232,36 @@ export const laporanService = {
     });
 
     return rows.sort((a, b) => b.totalTagihan - a.totalTagihan);
+  },
+
+  /**
+   * Rekap kilatan per santri untuk datatable:
+   * satu baris per santri, kolom untuk setiap event, dan total bayar.
+   */
+  async getRekapKilatanPerSantri(tahun: number): Promise<LaporanKilatanPerSantriRow[]> {
+    const matrix = await kilatanService.getKilatanMatrix(tahun);
+
+    const rows = matrix.map(({ santri, records }) => {
+      const events = Object.fromEntries(
+        KILATAN_EVENTS.map((event) => [event, 0])
+      ) as Record<EventKilatan, number>;
+
+      for (const r of records) {
+        events[r.event] = (events[r.event] || 0) + (r.total_dibayar || 0);
+      }
+
+      return {
+        santriId: santri.id,
+        nis: santri.nis,
+        nama: santri.nama,
+        kategori: santri.kategori,
+        events,
+        totalDibayar: KILATAN_EVENTS.reduce((sum, event) => sum + events[event], 0),
+      };
+    });
+
+    return rows.sort(
+      (a, b) => a.nama.localeCompare(b.nama, 'id') || a.nis.localeCompare(b.nis)
+    );
   },
 };
